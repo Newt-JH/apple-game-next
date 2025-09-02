@@ -3,7 +3,6 @@ import GameHeader from './GameHeader';
 import Cell from './Cell';
 import Modal from './Modal';
 import ParticleContainer from './ParticleContainer';
-import Gauge from './Gauge';
 import Menu from './Menu';
 import './Board.css';
 
@@ -39,7 +38,6 @@ const Board: React.FC = () => {
     { id: number; x: number; y: number; width: number; height: number }[]
   >([]);
 
-  // 브라우저 setInterval 타입은 number
   const timerRef = useRef<number | null>(null);
   const boardRef = useRef<HTMLDivElement>(null);
 
@@ -62,13 +60,9 @@ const Board: React.FC = () => {
     return () => window.removeEventListener('resize', setCellSize);
   }, [setCellSize]);
 
-  // --- TIMER LOGIC WITH PAUSE ---
   const startTimer = useCallback(() => {
-    if (timerRef.current !== null) {
-      window.clearInterval(timerRef.current);
-    }
+    if (timerRef.current !== null) window.clearInterval(timerRef.current);
     timerRef.current = window.setInterval(() => {
-      // Pause timer if menu is open
       if (isMenuOpen) return;
       setTime(prevTime => {
         if (prevTime <= 10) {
@@ -219,7 +213,7 @@ const Board: React.FC = () => {
 
   return (
     <div className="game-container">
-      <GameHeader score={score} onMenuClick={() => setIsMenuOpen(true)} />
+      <GameHeader score={score} time={time} onMenuClick={() => setIsMenuOpen(true)} />
 
       <div
         className={`board ${isAnimating || isMenuOpen ? 'locked' : ''}`}
@@ -242,8 +236,6 @@ const Board: React.FC = () => {
           </div>
         ))}
       </div>
-
-      <Gauge time={time} />
 
       <div className="ad-banner-placeholder">광고 배너 (Ad Banner)</div>
 

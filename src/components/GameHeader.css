@@ -2,39 +2,86 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 10px 20px;
+  padding: 10px 12px;
   background-color: #333;
   color: white;
   border-radius: 10px;
   margin: 10px;
   box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
-  height: 60px;
+  /* 게이지를 크게 담기 위해 높이를 유동적으로 */
+  min-height: 84px;
   box-sizing: border-box;
+  gap: 8px;
   flex-shrink: 0;
 }
 
-.score-display {
-  font-size: 22px;
-  font-weight: bold;
-}
-
-.score-display span {
-  color: #ffc107;
-  margin-left: 8px;
-}
-
-/* Menu button style */
 .menu-icon-button {
   font-size: 28px;
   color: #fff;
   background-color: transparent;
   border: none;
-  padding: 0;
+  padding: 0 6px;
   margin: 0;
   cursor: pointer;
   transition: opacity 0.2s ease;
 }
+.menu-icon-button:hover { opacity: 0.7; }
 
-.menu-icon-button:hover {
-  opacity: 0.7;
+/* 가운데 영역 확장 */
+.header-center {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+}
+
+/* 스코어+게이지 카드 */
+.score-card {
+  width: min(720px, 96%);
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 12px;
+  padding: 8px 10px;
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.05);
+}
+
+.score-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.score-display {
+  font-size: 18px;
+  font-weight: 700;
+}
+.score-display span {
+  color: #ffc107;
+  margin-left: 8px;
+  font-weight: 800;
+}
+
+/* 게이지가 카드 내부 거의 가득 차도록 */
+.gauge-row {
+  width: 100%;
+  height: 24px;           /* 게이지 높이 크게 */
+  display: flex;
+  align-items: center;
+}
+
+/* --- Gauge 내부 기본 스타일을 카드 안에서 최적화 --- */
+.score-card .gauge-wrapper {
+  padding: 0;             /* 바깥 여백 제거 */
+  margin: 0;
+  width: 100%;
+  height: 100%;
+}
+.score-card .gauge-container {
+  height: 100%;           /* 부모의 높이를 그대로 사용 */
+  background-color: #555;
+  border-radius: 10px;
+  border: 2px solid #666;
+}
+.score-card .gauge-text {
+  font-size: 13px;
 }
