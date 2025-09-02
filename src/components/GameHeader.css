@@ -1,66 +1,31 @@
 .game-header {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 10px 20px;
+  flex-direction: column; /* 세로 배치 */
+  justify-content: center;
+  align-items: stretch;
+  padding: 8px 12px;
   background-color: #333;
-  color: white;
   border-radius: 10px;
   margin: 10px;
   box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
-  height: 60px;
   box-sizing: border-box;
-  flex-shrink: 0;
 }
 
-.header-left-group, .header-right-group {
+/* 상단: 점수 + 햄버거 */
+.header-top {
   display: flex;
+  justify-content: space-between;
   align-items: center;
-  gap: 15px; /* Space between items in groups */
-}
-
-.score-display {
-  font-size: 22px;
-  font-weight: bold;
-}
-
-.score-display span {
-  color: #ffc107;
-  margin-left: 8px;
-}
-
-.hearts-display {
-  font-size: 22px;
-  font-weight: bold;
-}
-
-.hearts-display span {
-  color: #ff6347; /* Tomato color for hearts */
-  margin-left: 5px;
-}
-
-/* Ad button style */
-.ad-button {
-  font-size: 28px;
   color: #fff;
-  background-color: #4CAF50; /* Green background for plus button */
-  border: none;
-  border-radius: 50%; /* Circular */
-  width: 36px;
-  height: 36px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: background-color 0.2s ease, transform 0.1s ease;
+  font-size: 18px;
+  font-weight: bold;
 }
 
-.ad-button:hover {
-  background-color: #45a049;
-  transform: scale(1.05);
+/* 게이지는 점수 아래쪽에 꽉 차게 */
+.header-gauge {
+  margin-top: 6px; /* 점수랑 간격 */
 }
 
-/* Menu button style */
 .menu-icon-button {
   font-size: 28px;
   color: #fff;
@@ -70,6 +35,11 @@
   margin: 0;
   cursor: pointer;
   transition: opacity 0.2s ease;
+}
+
+.menu-icon-button::before {
+  content: "☰"; /* ← 햄버거 아이콘 */
+  font-size: 28px;
 }
 
 .menu-icon-button:hover {
