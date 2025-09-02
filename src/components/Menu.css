@@ -4,7 +4,7 @@
   left: 0;
   width: 100%;
   height: 100%;
-  background-color: rgba(0, 0, 0, 0.7); /* Slightly darker overlay */
+  background-color: rgba(0, 0, 0, 0.7);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -20,23 +20,30 @@
 }
 
 .menu-content {
-  background: #f8f9fa; /* Light grey background for content box */
-  padding: 40px 30px; /* More vertical padding */
+  background: #282c34; /* Dark background for content box */
+  padding: 20px 30px 40px; /* Reduced top padding, increased bottom padding */
   border-radius: 15px;
   display: flex;
   flex-direction: column;
   gap: 15px;
   align-items: center;
   box-shadow: 0 8px 20px rgba(0,0,0,0.5);
-  width: 280px; /* Fixed width */
-  max-width: 90%; /* Ensure it doesn't overflow on very small screens */
+  width: 280px;
+  max-width: 90%;
+}
+
+.menu-title {
+  font-size: 32px; /* Increased font size */
+  font-weight: bold;
+  color: #fff; /* White text for title */
+  margin-bottom: 10px;
 }
 
 .menu-button {
   font-size: 20px;
   font-weight: bold;
-  color: #fff; /* White text for buttons */
-  background-color: #e65d50; /* Primary blue */
+  color: #333;
+  background-color: #ef8989; /* Primary yellow */
   border: none;
   border-radius: 10px;
   padding: 12px 0;
@@ -48,16 +55,16 @@
 }
 
 .menu-button:hover {
-  background-color: #0056b3; /* Darker blue on hover */
+  background-color: #ffda6b;
   transform: translateY(-2px);
 }
 
 .menu-button.secondary {
-  background-color: #6c757d; /* Secondary grey */
+  background-color: #616161; /* Darker grey for secondary */
   color: #fff; /* White text for secondary */
 }
 
 .menu-button.secondary:hover {
-  background-color: #5a6268;
+  background-color: #757575;
   transform: translateY(-2px);
 }

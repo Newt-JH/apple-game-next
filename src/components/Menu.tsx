@@ -21,6 +21,7 @@ const Menu: React.FC<MenuProps> = ({ isOpen, onClose, onRestart }) => {
   return (
     <div className={`menu-overlay ${isOpen ? 'open' : ''}`} onClick={onClose}>
       <div className="menu-content" onClick={(e) => e.stopPropagation()}>
+        <h2 className="menu-title">Menu</h2> {/* Changed text */}
         <button className="menu-button" onClick={handleRestartClick}>
           🔄 다시하기
         </button>
