@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useRouter } from 'next/navigation';
 import GameHeader from './GameHeader';
 import Cell from './Cell';
 import Modal from './Modal';
@@ -41,6 +42,8 @@ function generateRandomBoard() {
 type AdMode = 'recharge' | 'revive' | null;
 
 const Board: React.FC = () => {
+  const router = useRouter();
+
   const [score, setScore] = useState(0);
   const [time, setTime] = useState(MAX_TIME);
   const [isTimeOver, setIsTimeOver] = useState(false);
@@ -64,9 +67,10 @@ const Board: React.FC = () => {
     const saved = parseInt(getCookie(HEART_COOKIE) ?? `${MAX_HEARTS}`, 10);
     return isNaN(saved) ? MAX_HEARTS : saved;
   });
-  const [adMode, setAdMode] = useState<AdMode>(null);   // 'recharge' | 'revive'
-  const [adOpen, setAdOpen] = useState(false);
-  const [pendingRestart, setPendingRestart] = useState(false); // 광고 후 재시작 예약
+  const [adMode, setAdMode] = useState<AdMode>(null);        // 'recharge' | 'revive'
+  const [adChoiceOpen, setAdChoiceOpen] = useState(false);   // 선택 모달(광고 보시겠어요?)
+  const [adPlayingOpen, setAdPlayingOpen] = useState(false); // 실제 광고(목업) 모달
+  const [pendingRestart, setPendingRestart] = useState(false);
 
   const timerRef = useRef<number | null>(null);
   const boardRef = useRef<HTMLDivElement>(null);
@@ -94,7 +98,7 @@ const Board: React.FC = () => {
   const startTimer = useCallback(() => {
     if (timerRef.current !== null) window.clearInterval(timerRef.current);
     timerRef.current = window.setInterval(() => {
-      if (isMenuOpen || adOpen) return;
+      if (isMenuOpen || adChoiceOpen || adPlayingOpen) return;
       setTime(prev => {
         if (prev <= 10) {
           if (!isTimeOver) setIsTimeOver(true);
@@ -104,13 +108,13 @@ const Board: React.FC = () => {
         return prev - 10;
       });
     }, 10);
-  }, [isMenuOpen, adOpen, isTimeOver]);
+  }, [isMenuOpen, adChoiceOpen, adPlayingOpen, isTimeOver]);
   useEffect(() => {
     startTimer();
     return () => { if (timerRef.current !== null) window.clearInterval(timerRef.current); };
   }, [startTimer]);
 
-  // --- 페이지 진입 시: 리로드면 하트 1개 소모 + 0개면 모달 ---
+  // --- 페이지 진입 시: 리로드면 하트 1개 소모, 0개면 충전 유도 ---
   useEffect(() => {
     const nav = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined;
     const isReload = nav?.type === 'reload';
@@ -127,11 +131,11 @@ const Board: React.FC = () => {
 
     if (lives <= 0) {
       setAdMode('recharge');
-      setAdOpen(true); // 하트 부족 → 충전 유도
+      setAdChoiceOpen(true);
     }
   }, []);
 
-  // --- 하트 소모 헬퍼 ---
+  // --- 하트 소모 ---
   const spendHeart = (n = 1): number => {
     let lives = parseInt(getCookie(HEART_COOKIE) ?? `${hearts}`, 10);
     if (isNaN(lives)) lives = hearts;
@@ -141,7 +145,7 @@ const Board: React.FC = () => {
     return next;
   };
 
-  // --- 재시작 ---
+  // --- 재시작 & 초기화 ---
   const doRestart = () => {
     setScore(0);
     setTime(MAX_TIME);
@@ -157,24 +161,31 @@ const Board: React.FC = () => {
   };
 
   const handleRestart = useCallback(() => {
-    // 하트 소모 → 없으면 광고 충전 모달
     const afterSpend = spendHeart(1);
     if (afterSpend <= 0) {
       setPendingRestart(true);
       setAdMode('recharge');
-      setAdOpen(true);
+      setAdChoiceOpen(true);
       return;
     }
     doRestart();
-  }, []); // spendHeart, set states use latest via closures
+  }, []); // 내부에서 최신 상태 참조 OK
 
-  // --- 광고 모달 액션 ---
-  const handleWatchAd = () => {
+  // --- 광고 선택 모달 버튼들 ---
+  const openAdFlow = () => {
+    // 선택 모달 닫고 실제 광고 모달 열기
+    setAdChoiceOpen(false);
+    setAdPlayingOpen(true);
+  };
+
+  // 광고 모달 닫힘(시청 완료 처리)
+  const onAdFinished = () => {
+    setAdPlayingOpen(false);
+
     if (adMode === 'recharge') {
-      // 풀충전
+      // 하트 풀 충전
       setHearts(MAX_HEARTS);
       setCookie(HEART_COOKIE, String(MAX_HEARTS));
-      setAdOpen(false);
       if (pendingRestart) {
         setPendingRestart(false);
         doRestart();
@@ -183,7 +194,6 @@ const Board: React.FC = () => {
       // 이어하기: +60초
       setTime(prev => Math.min(MAX_TIME, prev + 60000));
       setIsTimeOver(false);
-      setAdOpen(false);
       startTimer();
     }
   };
@@ -199,15 +209,15 @@ const Board: React.FC = () => {
   }, []);
 
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
-    if (isTimeOver || isAnimating || isMenuOpen || adOpen) return;
+    if (isTimeOver || isAnimating || isMenuOpen || adChoiceOpen || adPlayingOpen) return;
     const cell = getCellFromTouch(e.touches[0]);
     if (!cell) return;
     setStartCell(cell);
     setSelectedCells(new Set([`${cell.row}-${cell.col}`]));
-  }, [isTimeOver, isAnimating, isMenuOpen, adOpen, getCellFromTouch]);
+  }, [isTimeOver, isAnimating, isMenuOpen, adChoiceOpen, adPlayingOpen, getCellFromTouch]);
 
   const handleTouchMove = useCallback((e: React.TouchEvent) => {
-    if (isTimeOver || isAnimating || isMenuOpen || adOpen) return;
+    if (isTimeOver || isAnimating || isMenuOpen || adChoiceOpen || adPlayingOpen) return;
     if (!startCell) return;
     const current = getCellFromTouch(e.touches[0]);
     if (!current) return;
@@ -222,10 +232,10 @@ const Board: React.FC = () => {
       }
     }
     setSelectedCells(newSelected);
-  }, [isTimeOver, isAnimating, isMenuOpen, adOpen, startCell, getCellFromTouch]);
+  }, [isTimeOver, isAnimating, isMenuOpen, adChoiceOpen, adPlayingOpen, startCell, getCellFromTouch]);
 
   const handleTouchEnd = useCallback(() => {
-    if (isTimeOver || isAnimating || isMenuOpen || adOpen || selectedCells.size === 0) return;
+    if (isTimeOver || isAnimating || isMenuOpen || adChoiceOpen || adPlayingOpen || selectedCells.size === 0) return;
 
     let sum = 0;
     selectedCells.forEach(key => {
@@ -291,14 +301,14 @@ const Board: React.FC = () => {
       setSelectedCells(new Set());
       setStartCell(null);
     }
-  }, [isTimeOver, isAnimating, isMenuOpen, adOpen, selectedCells, boardData]);
+  }, [isTimeOver, isAnimating, isMenuOpen, adChoiceOpen, adPlayingOpen, selectedCells, boardData]);
 
-  // --- 시간 종료 시: 점수 < 100 이면 리바이브 제안 ---
+  // --- 시간 종료 시: 점수 < 100 → 리바이브 제안 ---
   useEffect(() => {
     if (isTimeOver) {
       if (score < 100) {
         setAdMode('revive');
-        setAdOpen(true);
+        setAdChoiceOpen(true);
       }
     }
   }, [isTimeOver, score]);
@@ -307,12 +317,12 @@ const Board: React.FC = () => {
     <div className="game-container">
       <GameHeader
         score={score}
-        time={time}                 // ⬅ 게이지용
+        time={time}                 // 게이지 노출용
         onMenuClick={() => setIsMenuOpen(true)}
       />
 
       <div
-        className={`board ${isAnimating || isMenuOpen || adOpen ? 'locked' : ''}`}
+        className={`board ${isAnimating || isMenuOpen || adChoiceOpen || adPlayingOpen ? 'locked' : ''}`}
         ref={boardRef}
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
@@ -342,10 +352,10 @@ const Board: React.FC = () => {
         onHelpClick={() => setIsHelpOpen(true)}
       />
 
-      {/* 기본 종료 모달(끝내기) */}
-      {isTimeOver && !adOpen && score >= 100 && (
+      {/* 기본 종료 모달(100점 이상인 경우) */}
+      {isTimeOver && !adChoiceOpen && !adPlayingOpen && score >= 100 && (
         <Modal
-          isActive={true}
+          isActive
           title="⏰ 시간이 종료되었습니다!"
           message={`최종 점수: ${score}`}
           primaryButtonText="다시하기"
@@ -353,10 +363,10 @@ const Board: React.FC = () => {
         />
       )}
 
-      {/* 광고 모달 (충전/리바이브 겸용) */}
-      {adOpen && (
+      {/* 광고 선택 모달 (충전/리바이브 공용) */}
+      {adChoiceOpen && (
         <Modal
-          isActive={true}
+          isActive
           title={adMode === 'recharge' ? '하트가 부족합니다' : '광고 시청으로 60초 추가'}
           message={
             adMode === 'recharge'
@@ -364,16 +374,28 @@ const Board: React.FC = () => {
               : '광고를 보면 남은 시간에 60초가 추가됩니다.'
           }
           primaryButtonText={adMode === 'recharge' ? '광고 시청' : '광고 보고 이어하기'}
-          onPrimaryButtonClick={handleWatchAd}
-          secondaryButtonText="닫기"
-          onSecondaryButtonClick={() => { setAdOpen(false); setPendingRestart(false); }}
+          onPrimaryButtonClick={openAdFlow}
+          secondaryButtonText={adMode === 'recharge' ? '홈으로' : '끝내기'}
+          onSecondaryButtonClick={() => {
+            if (adMode === 'recharge') {
+              // 홈으로
+              setAdChoiceOpen(false);
+              router.push('/home');
+            } else {
+              // 끝내기: 점수 모달 없이 그냥 닫음(원하면 여기서 종료 모달 띄우기 가능)
+              setAdChoiceOpen(false);
+            }
+          }}
         />
       )}
+
+      {/* 실제 광고 모달(목업) : 닫기 = 시청완료 처리 */}
+      {adPlayingOpen && <AdPlayingModal onClose={onAdFinished} />}
 
       {/* 도움말 */}
       {isHelpOpen && (
         <Modal
-          isActive={true}
+          isActive
           title="도움말"
           message={`직사각형을 드래그해서 선택하고, 합이 10이면 사과가 제거됩니다.\n모든 사과를 없애면 클리어입니다.`}
           primaryButtonText="닫기"
@@ -400,3 +422,19 @@ const Board: React.FC = () => {
 };
 
 export default Board;
+
+/** ====== 광고 재생(목업) 모달 ====== */
+function AdPlayingModal({ onClose }: { onClose: () => void }) {
+  return (
+    <div className="modal-overlay">
+      <div className="modal-adplay">
+        <div className="fake-ad">광고 재생 중… (목업)</div>
+        <div className="modal-actions">
+          <button className="btn" onClick={onClose}>
+            광고 닫기
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
