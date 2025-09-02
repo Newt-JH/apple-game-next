@@ -1,0 +1,27 @@
+.cell {
+  width: var(--cell-size);
+  height: var(--cell-size);
+  background-image: url('../../public/apple.png');
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  font-size: var(--font-size);
+  font-weight: bold;
+  color: white;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding-bottom: var(--cell-padding);
+  box-sizing: border-box;
+  user-select: none;
+}
+
+.cell.selected {
+  outline: 3px solid #ff4d4d;
+  box-shadow: 0 0 0 2px white inset;
+}
+
+.cell.empty {
+  opacity: 0.3;
+  background-image: none;
+}
