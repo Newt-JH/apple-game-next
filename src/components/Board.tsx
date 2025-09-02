@@ -16,16 +16,22 @@ const HEART_COOKIE = 'lives';
 
 // --- 쿠키 유틸 ---
 const setCookie = (name: string, value: string) => {
-  document.cookie = `${name}=${encodeURIComponent(value)}; path=/; max-age=${60 * 60 * 24 * 365}`;
+  if (typeof document === "undefined") return; // SSR 방지
+  document.cookie = `${name}=${encodeURIComponent(value)}; path=/; max-age=${
+    60 * 60 * 24 * 365
+  }`;
 };
+
 const getCookie = (name: string): string | null => {
-  const pairs = document.cookie?.split(';') ?? [];
+  if (typeof document === "undefined") return null; // SSR 방지
+  const pairs = document.cookie?.split(";") ?? [];
   for (const p of pairs) {
-    const [k, ...rest] = p.trim().split('=');
-    if (k === name) return decodeURIComponent(rest.join('='));
+    const [k, ...rest] = p.trim().split("=");
+    if (k === name) return decodeURIComponent(rest.join("="));
   }
   return null;
 };
+
 const clamp = (n: number, min: number, max: number) => Math.max(min, Math.min(max, n));
 
 function generateRandomNumber() {
@@ -77,17 +83,18 @@ const Board: React.FC = () => {
 
   // --- 셀 크기 계산 ---
   const setCellSize = useCallback(() => {
-    if (!boardRef.current) return;
+    if (typeof document === "undefined" || !boardRef.current) return;
     const boardElement = boardRef.current;
     const boardWidth = boardElement.clientWidth - 8;
     const boardHeight = boardElement.clientHeight - 30;
     const cellWidth = (boardWidth - (BOARD_WIDTH - 1) * 1) / BOARD_WIDTH;
     const cellHeight = (boardHeight - (BOARD_HEIGHT - 1) * 1) / BOARD_HEIGHT;
     const size = Math.floor(Math.min(cellWidth, cellHeight));
-    document.documentElement.style.setProperty('--cell-size', `${size}px`);
-    document.documentElement.style.setProperty('--font-size', `${size * 0.5}px`);
-    document.documentElement.style.setProperty('--cell-padding', `${size * 0.1}px`);
+    document.documentElement.style.setProperty("--cell-size", `${size}px`);
+    document.documentElement.style.setProperty("--font-size", `${size * 0.5}px`);
+    document.documentElement.style.setProperty("--cell-padding", `${size * 0.1}px`);
   }, []);
+
   useEffect(() => {
     setCellSize();
     window.addEventListener('resize', setCellSize);
@@ -198,12 +205,13 @@ const Board: React.FC = () => {
     }
   };
 
-  // --- 터치 핸들러들 ---
+  // --- 터치 핸들러 ---
   const getCellFromTouch = useCallback((touch: React.Touch) => {
+    if (typeof document === "undefined") return null;
     const target = document.elementFromPoint(touch.clientX, touch.clientY);
-    if (!target || !(target as HTMLElement).classList.contains('cell')) return null;
-    const row = (target as HTMLElement).getAttribute('data-row');
-    const col = (target as HTMLElement).getAttribute('data-col');
+    if (!target || !(target as HTMLElement).classList.contains("cell")) return null;
+    const row = (target as HTMLElement).getAttribute("data-row");
+    const col = (target as HTMLElement).getAttribute("data-col");
     if (row === null || col === null) return null;
     return { row: parseInt(row, 10), col: parseInt(col, 10) };
   }, []);
@@ -256,9 +264,9 @@ const Board: React.FC = () => {
 
       selectedCells.forEach(key => {
         const [row, col] = key.split('-').map(Number);
-        const cellElement = document.querySelector(
-          `[data-row="${row}"][data-col="${col}"]`
-        ) as HTMLElement | null;
+        const cellElement = (typeof document !== "undefined")
+        ? document.querySelector(`[data-row="${row}"][data-col="${col}"]`) as HTMLElement | null
+        : null;
         if (!cellElement) return;
         const rect = cellElement.getBoundingClientRect();
         const startX = rect.left;

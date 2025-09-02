@@ -8,22 +8,25 @@ const MAX_LIVES = 5;
 const REFILL_INTERVAL_MS = 10 * 60 * 1000; // 10분
 const COOKIE_DAYS = 365;
 
+// --- 안전한 쿠키 유틸 ---
 function setCookie(name: string, value: string, days = COOKIE_DAYS) {
-  const d = new Date();
-  d.setTime(d.getTime() + days * 24 * 60 * 60 * 1000);
-  document.cookie = `${name}=${encodeURIComponent(value)};expires=${d.toUTCString()};path=/`;
-}
-function getCookie(name: string): string | null {
-  const pairs = document.cookie?.split(';') ?? [];
-  for (const p of pairs) {
-    const [k, ...rest] = p.trim().split('=');
-    if (k === name) return decodeURIComponent(rest.join('='));
+    if (typeof document === 'undefined') return; // SSR 방지
+    const d = new Date();
+    d.setTime(d.getTime() + days * 24 * 60 * 60 * 1000);
+    document.cookie = `${name}=${encodeURIComponent(value)};expires=${d.toUTCString()};path=/`;
   }
-  return null;
-}
-function clamp(n: number, min: number, max: number) {
-  return Math.max(min, Math.min(max, n));
-}
+  function getCookie(name: string): string | null {
+    if (typeof document === 'undefined') return null; // SSR 방지
+    const pairs = document.cookie?.split(';') ?? [];
+    for (const p of pairs) {
+      const [k, ...rest] = p.trim().split('=');
+      if (k === name) return decodeURIComponent(rest.join('='));
+    }
+    return null;
+  }
+  function clamp(n: number, min: number, max: number) {
+    return Math.max(min, Math.min(max, n));
+  }
 
 type NoticeItem = {
   id: string;
