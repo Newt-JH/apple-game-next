@@ -10,24 +10,211 @@ const BOARD_WIDTH = 10;
 const BOARD_HEIGHT = 17;
 const MAX_TIME = 100000;
 
-function generateRandomNumber() {
-  const probabilities = [1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 5, 5, 6, 6, 7, 8, 9];
-  const randomIndex = Math.floor(Math.random() * probabilities.length);
-  return probabilities[randomIndex];
+/* =========================
+   RNG & 유틸
+========================= */
+function mulberry32(seed: number) {
+  let t = seed >>> 0;
+  return function () {
+    t += 0x6D2B79F5;
+    let r = Math.imul(t ^ (t >>> 15), 1 | t);
+    r ^= r + Math.imul(r ^ (r >>> 7), 61 | r);
+    return ((r ^ (r >>> 14)) >>> 0) / 4294967296;
+  };
+}
+function randInt(rng: () => number, min: number, max: number) {
+  return Math.floor(rng() * (max - min + 1)) + min;
+}
+function shuffleInPlace<T>(arr: T[], rng: () => number) {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
 }
 
-function generateRandomBoard() {
-  return Array.from({ length: BOARD_HEIGHT }, () =>
-    Array.from({ length: BOARD_WIDTH }, () => generateRandomNumber())
-  );
+/* =========================
+   블록 타입 & 숫자 픽커
+========================= */
+type BlockKind = 'H2' | 'V2' | 'S2x2' | 'H3' | 'V3';
+
+/** 난이도 ↑: 2x2는 “한눈에 안 들어오는” 조합 위주 */
+const QUAD_CANDIDATES: number[][] = [
+  [1, 1, 3, 5],
+  [1, 2, 2, 5],
+  [2, 2, 2, 4],
+  [1, 1, 2, 6],
+  [1, 1, 1, 7],
+  [2, 3, 2, 3], // 2,3 반복으로 눈에 안 띄게
+];
+
+/** 난이도 중상: 1x3은 다양한 분산 */
+const TRIPLE_CANDIDATES: number[][] = [
+  [1, 2, 7], [1, 3, 6], [1, 4, 5],
+  [2, 2, 6], [2, 3, 5], [2, 4, 4],
+  [3, 3, 4],
+];
+
+/** 쌍은 (5,5), (4,6) 빈도 낮추기 → 가중치로 제어 */
+const PAIR_WEIGHTS: Array<{ a: number; w: number }> = [
+  { a: 1, w: 1.2 }, { a: 2, w: 1.1 }, { a: 3, w: 1.1 },
+  { a: 4, w: 0.7 }, { a: 5, w: 0.4 }, { a: 6, w: 0.7 },
+  { a: 7, w: 1.0 }, { a: 8, w: 1.0 }, { a: 9, w: 1.0 },
+];
+
+function weightedPickPair(rng: () => number): [number, number] {
+  const sumW = PAIR_WEIGHTS.reduce((s, x) => s + x.w, 0);
+  let r = rng() * sumW;
+  for (const x of PAIR_WEIGHTS) {
+    if ((r -= x.w) <= 0) return [x.a, 10 - x.a];
+  }
+  return [1, 9];
 }
+function pickTriple(rng: () => number): [number, number, number] {
+  const cand = TRIPLE_CANDIDATES[randInt(rng, 0, TRIPLE_CANDIDATES.length - 1)];
+  const arr = cand.slice(); shuffleInPlace(arr, rng);
+  return [arr[0], arr[1], arr[2]];
+}
+function pickQuad(rng: () => number): [number, number, number, number] {
+  const cand = QUAD_CANDIDATES[randInt(rng, 0, QUAD_CANDIDATES.length - 1)];
+  const arr = cand.slice(); shuffleInPlace(arr, rng);
+  return [arr[0], arr[1], arr[2], arr[3]];
+}
+
+/* =========================
+   보드 생성 (난이도 조정판)
+========================= */
+type Ratios = { H2: number; V2: number; S2x2: number; H3: number; V3: number; };
+function normalizeRatios(r: Ratios): Ratios {
+  const s = r.H2 + r.V2 + r.S2x2 + r.H3 + r.V3 || 1;
+  return { H2: r.H2 / s, V2: r.V2 / s, S2x2: r.S2x2 / s, H3: r.H3 / s, V3: r.V3 / s };
+}
+function jitterRatios(base: Ratios, rng: () => number, j = 0.04): Ratios {
+  const add = (x: number) => Math.max(0, x + (rng() * 2 - 1) * j);
+  return normalizeRatios({ H2: add(base.H2), V2: add(base.V2), S2x2: add(base.S2x2), H3: add(base.H3), V3: add(base.V3) });
+}
+
+/** 목표: 클리어율 ~60% → 쌍 50%, 2x2 35%, 1x3/3x1 15% */
+const BASE_RATIOS: Ratios = { H2: 0.35, V2: 0.15, S2x2: 0.35, H3: 0.12, V3: 0.03 };
+
+function generateSolvableBoardWithBlocks(
+  width = BOARD_WIDTH,
+  height = BOARD_HEIGHT
+): number[][] {
+  const seed = Math.floor(Math.random() * 0xffffffff);
+  const rng = mulberry32(seed);
+
+  const ratios = jitterRatios(BASE_RATIOS, rng, 0.05);
+
+  const board: number[][] = Array.from({ length: height }, () =>
+    Array.from({ length: width }, () => 0)
+  );
+  const occ: boolean[][] = Array.from({ length: height }, () =>
+    Array.from({ length: width }, () => false)
+  );
+
+  const coords: { r: number; c: number }[] = [];
+  for (let r = 0; r < height; r++) for (let c = 0; c < width; c++) coords.push({ r, c });
+  shuffleInPlace(coords, rng);
+
+  const fits = (r: number, c: number) => !occ[r][c];
+
+  const place = (kind: BlockKind, r: number, c: number): boolean => {
+    if (kind === 'H2') {
+      if (c + 1 >= width || !fits(r, c) || !fits(r, c + 1)) return false;
+      const [a, b] = weightedPickPair(rng);
+      board[r][c] = a; board[r][c + 1] = b;
+      occ[r][c] = occ[r][c + 1] = true;
+      return true;
+    }
+    if (kind === 'V2') {
+      if (r + 1 >= height || !fits(r, c) || !fits(r + 1, c)) return false;
+      const [a, b] = weightedPickPair(rng);
+      board[r][c] = a; board[r + 1][c] = b;
+      occ[r][c] = occ[r + 1][c] = true;
+      return true;
+    }
+    if (kind === 'S2x2') {
+      if (r + 1 >= height || c + 1 >= width) return false;
+      if (!fits(r, c) || !fits(r, c + 1) || !fits(r + 1, c) || !fits(r + 1, c + 1)) return false;
+      const q = pickQuad(rng);
+      shuffleInPlace(q, rng);
+      board[r][c] = q[0]; board[r][c + 1] = q[1];
+      board[r + 1][c] = q[2]; board[r + 1][c + 1] = q[3];
+      occ[r][c] = occ[r][c + 1] = occ[r + 1][c] = occ[r + 1][c + 1] = true;
+      return true;
+    }
+    if (kind === 'H3') {
+      if (c + 2 >= width || !fits(r, c) || !fits(r, c + 1) || !fits(r, c + 2)) return false;
+      const t = pickTriple(rng);
+      shuffleInPlace(t, rng);
+      board[r][c] = t[0]; board[r][c + 1] = t[1]; board[r][c + 2] = t[2];
+      occ[r][c] = occ[r][c + 1] = occ[r][c + 2] = true;
+      return true;
+    }
+    if (kind === 'V3') {
+      if (r + 2 >= height || !fits(r, c) || !fits(r + 1, c) || !fits(r + 2, c)) return false;
+      const t = pickTriple(rng);
+      shuffleInPlace(t, rng);
+      board[r][c] = t[0]; board[r + 1][c] = t[1]; board[r + 2][c] = t[2];
+      occ[r][c] = occ[r + 1][c] = occ[r + 2][c] = true;
+      return true;
+    }
+    return false;
+  };
+
+  for (const { r, c } of coords) {
+    if (occ[r][c]) continue;
+
+    // 가중치에 따라 후보 풀 만들고 셔플
+    const cands: BlockKind[] = [];
+    const pushW = (k: BlockKind, w: number) => {
+      const n = Math.max(1, Math.round(w * 5));
+      for (let i = 0; i < n; i++) cands.push(k);
+    };
+    pushW('H2', ratios.H2);
+    pushW('V2', ratios.V2);
+    pushW('S2x2', ratios.S2x2);
+    pushW('H3', ratios.H3);
+    pushW('V3', ratios.V3);
+    shuffleInPlace(cands, rng);
+
+    let ok = false;
+    for (const k of cands) {
+      if (place(k, r, c)) { ok = true; break; }
+    }
+    if (!ok) {
+      // 안전망: H2 → V2 순서로 강제
+      if (!(place('H2', r, c) || place('V2', r, c))) {
+        // 드문 케이스: 좌/상 역방향
+        if (c - 1 >= 0 && !occ[r][c - 1]) {
+          const [a, b] = weightedPickPair(rng);
+          board[r][c - 1] = a; board[r][c] = b;
+          occ[r][c - 1] = occ[r][c] = true;
+        } else if (r - 1 >= 0 && !occ[r - 1][c]) {
+          const [a, b] = weightedPickPair(rng);
+          board[r - 1][c] = a; board[r][c] = b;
+          occ[r - 1][c] = occ[r][c] = true;
+        } else {
+          board[r][c] = randInt(rng, 1, 9);
+          occ[r][c] = true;
+        }
+      }
+    }
+  }
+
+  return board;
+}
+
+/* =========================
+   React 컴포넌트
+========================= */
 
 const Board: React.FC = () => {
   const [score, setScore] = useState<number>(0);
   const [time, setTime] = useState<number>(MAX_TIME);
   const [isTimeOver, setIsTimeOver] = useState<boolean>(false);
   const [isMenuOpen, setIsMenuOpen] = useState<boolean>(false);
-  const [boardData, setBoardData] = useState<number[][]>(generateRandomBoard());
+  const [boardData, setBoardData] = useState<number[][]>(generateSolvableBoardWithBlocks());
   const [selectedCells, setSelectedCells] = useState<Set<string>>(new Set());
   const [startCell, setStartCell] = useState<{ row: number; col: number } | null>(null);
   const [isAnimating, setIsAnimating] = useState<boolean>(false);
@@ -87,7 +274,7 @@ const Board: React.FC = () => {
     setTime(MAX_TIME);
     setIsTimeOver(false);
     setIsMenuOpen(false);
-    setBoardData(generateRandomBoard());
+    setBoardData(generateSolvableBoardWithBlocks());
     setSelectedCells(new Set());
     setStartCell(null);
     setIsAnimating(false);
@@ -149,9 +336,13 @@ const Board: React.FC = () => {
     const isValid = sum === 10 && selectedCells.size >= 2;
     if (isValid) {
       setIsAnimating(true);
-      const clearedApplesCount = selectedCells.size;
-      setScore(prevScore => prevScore + clearedApplesCount);
-      setTime(prevTime => Math.min(MAX_TIME, prevTime + clearedApplesCount * 1000));
+      const clearedCount = selectedCells.size;
+
+      // 점수: 셀 개수만큼
+      setScore(prev => prev + clearedCount);
+
+      // 난이도 ↑: "클리어당 +2초"로 고정
+      setTime(prev => Math.min(MAX_TIME, prev + 2000));
 
       const newParticles: { id: number; x: number; y: number; burstX: number; burstY: number }[] = [];
       const newFallingApples: { id: number; x: number; y: number; width: number; height: number }[] = [];
