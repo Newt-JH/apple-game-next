@@ -9,6 +9,7 @@ interface ModalProps {
   onPrimaryButtonClick?: () => void;
   secondaryButtonText?: string;
   onSecondaryButtonClick?: () => void;
+  showCloseButton?: boolean; // New prop for X button
 }
 
 const Modal: React.FC<ModalProps> = ({
@@ -19,6 +20,7 @@ const Modal: React.FC<ModalProps> = ({
   onPrimaryButtonClick,
   secondaryButtonText,
   onSecondaryButtonClick,
+  showCloseButton = false, // Default to false
 }) => {
   if (!isActive) return null;
 
@@ -26,10 +28,15 @@ const Modal: React.FC<ModalProps> = ({
     <div className="modal-container active">
       <div className="modal-overlay">
         <div className="modal-content">
+          {showCloseButton && (
+            <button className="modal-close-button" onClick={onSecondaryButtonClick}>
+              X
+            </button>
+          )}
           <div className="modal-title">{title}</div>
           <div className="modal-text">{message}</div>
           <div className="modal-buttons">
-            {secondaryButtonText && onSecondaryButtonClick && (
+            {secondaryButtonText && onSecondaryButtonClick && !showCloseButton && (
               <button className="modal-button secondary" onClick={onSecondaryButtonClick}>
                 {secondaryButtonText}
               </button>

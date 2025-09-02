@@ -3,229 +3,46 @@ import GameHeader from './GameHeader';
 import Cell from './Cell';
 import Modal from './Modal';
 import ParticleContainer from './ParticleContainer';
+import Gauge from './Gauge';
 import Menu from './Menu';
 import './Board.css';
 
 const BOARD_WIDTH = 10;
 const BOARD_HEIGHT = 17;
 const MAX_TIME = 100000;
+const MAX_HEARTS = 5; // Max hearts
+const CHARGE_TIME_SECONDS = 600; // 10 minutes
 
-/* =========================
-   RNG & 유틸
-========================= */
-function mulberry32(seed: number) {
-  let t = seed >>> 0;
-  return function () {
-    t += 0x6D2B79F5;
-    let r = Math.imul(t ^ (t >>> 15), 1 | t);
-    r ^= r + Math.imul(r ^ (r >>> 7), 61 | r);
-    return ((r ^ (r >>> 14)) >>> 0) / 4294967296;
-  };
-}
-function randInt(rng: () => number, min: number, max: number) {
-  return Math.floor(rng() * (max - min + 1)) + min;
-}
-function shuffleInPlace<T>(arr: T[], rng: () => number) {
-  for (let i = arr.length - 1; i > 0; i--) {
-    const j = Math.floor(rng() * (i + 1));
-    [arr[i], arr[j]] = [arr[j], arr[i]];
-  }
+function generateRandomNumber() {
+  const probabilities = [1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 5, 5, 6, 6, 7, 8, 9];
+  const randomIndex = Math.floor(Math.random() * probabilities.length);
+  return probabilities[randomIndex];
 }
 
-/* =========================
-   블록 타입 & 숫자 픽커
-========================= */
-type BlockKind = 'H2' | 'V2' | 'S2x2' | 'H3' | 'V3';
-
-/** 난이도 ↑: 2x2는 “한눈에 안 들어오는” 조합 위주 */
-const QUAD_CANDIDATES: number[][] = [
-  [1, 1, 3, 5],
-  [1, 2, 2, 5],
-  [2, 2, 2, 4],
-  [1, 1, 2, 6],
-  [1, 1, 1, 7],
-  [2, 3, 2, 3], // 2,3 반복으로 눈에 안 띄게
-];
-
-/** 난이도 중상: 1x3은 다양한 분산 */
-const TRIPLE_CANDIDATES: number[][] = [
-  [1, 2, 7], [1, 3, 6], [1, 4, 5],
-  [2, 2, 6], [2, 3, 5], [2, 4, 4],
-  [3, 3, 4],
-];
-
-/** 쌍은 (5,5), (4,6) 빈도 낮추기 → 가중치로 제어 */
-const PAIR_WEIGHTS: Array<{ a: number; w: number }> = [
-  { a: 1, w: 1.2 }, { a: 2, w: 1.1 }, { a: 3, w: 1.1 },
-  { a: 4, w: 0.7 }, { a: 5, w: 0.4 }, { a: 6, w: 0.7 },
-  { a: 7, w: 1.0 }, { a: 8, w: 1.0 }, { a: 9, w: 1.0 },
-];
-
-function weightedPickPair(rng: () => number): [number, number] {
-  const sumW = PAIR_WEIGHTS.reduce((s, x) => s + x.w, 0);
-  let r = rng() * sumW;
-  for (const x of PAIR_WEIGHTS) {
-    if ((r -= x.w) <= 0) return [x.a, 10 - x.a];
-  }
-  return [1, 9];
-}
-function pickTriple(rng: () => number): [number, number, number] {
-  const cand = TRIPLE_CANDIDATES[randInt(rng, 0, TRIPLE_CANDIDATES.length - 1)];
-  const arr = cand.slice(); shuffleInPlace(arr, rng);
-  return [arr[0], arr[1], arr[2]];
-}
-function pickQuad(rng: () => number): [number, number, number, number] {
-  const cand = QUAD_CANDIDATES[randInt(rng, 0, QUAD_CANDIDATES.length - 1)];
-  const arr = cand.slice(); shuffleInPlace(arr, rng);
-  return [arr[0], arr[1], arr[2], arr[3]];
-}
-
-/* =========================
-   보드 생성 (난이도 조정판)
-========================= */
-type Ratios = { H2: number; V2: number; S2x2: number; H3: number; V3: number; };
-function normalizeRatios(r: Ratios): Ratios {
-  const s = r.H2 + r.V2 + r.S2x2 + r.H3 + r.V3 || 1;
-  return { H2: r.H2 / s, V2: r.V2 / s, S2x2: r.S2x2 / s, H3: r.H3 / s, V3: r.V3 / s };
-}
-function jitterRatios(base: Ratios, rng: () => number, j = 0.04): Ratios {
-  const add = (x: number) => Math.max(0, x + (rng() * 2 - 1) * j);
-  return normalizeRatios({ H2: add(base.H2), V2: add(base.V2), S2x2: add(base.S2x2), H3: add(base.H3), V3: add(base.V3) });
-}
-
-/** 목표: 클리어율 ~60% → 쌍 50%, 2x2 35%, 1x3/3x1 15% */
-const BASE_RATIOS: Ratios = { H2: 0.35, V2: 0.15, S2x2: 0.35, H3: 0.12, V3: 0.03 };
-
-function generateSolvableBoardWithBlocks(
-  width = BOARD_WIDTH,
-  height = BOARD_HEIGHT
-): number[][] {
-  const seed = Math.floor(Math.random() * 0xffffffff);
-  const rng = mulberry32(seed);
-
-  const ratios = jitterRatios(BASE_RATIOS, rng, 0.05);
-
-  const board: number[][] = Array.from({ length: height }, () =>
-    Array.from({ length: width }, () => 0)
+function generateRandomBoard() {
+  return Array.from({ length: BOARD_HEIGHT }, () =>
+    Array.from({ length: BOARD_WIDTH }, () => generateRandomNumber())
   );
-  const occ: boolean[][] = Array.from({ length: height }, () =>
-    Array.from({ length: width }, () => false)
-  );
-
-  const coords: { r: number; c: number }[] = [];
-  for (let r = 0; r < height; r++) for (let c = 0; c < width; c++) coords.push({ r, c });
-  shuffleInPlace(coords, rng);
-
-  const fits = (r: number, c: number) => !occ[r][c];
-
-  const place = (kind: BlockKind, r: number, c: number): boolean => {
-    if (kind === 'H2') {
-      if (c + 1 >= width || !fits(r, c) || !fits(r, c + 1)) return false;
-      const [a, b] = weightedPickPair(rng);
-      board[r][c] = a; board[r][c + 1] = b;
-      occ[r][c] = occ[r][c + 1] = true;
-      return true;
-    }
-    if (kind === 'V2') {
-      if (r + 1 >= height || !fits(r, c) || !fits(r + 1, c)) return false;
-      const [a, b] = weightedPickPair(rng);
-      board[r][c] = a; board[r + 1][c] = b;
-      occ[r][c] = occ[r + 1][c] = true;
-      return true;
-    }
-    if (kind === 'S2x2') {
-      if (r + 1 >= height || c + 1 >= width) return false;
-      if (!fits(r, c) || !fits(r, c + 1) || !fits(r + 1, c) || !fits(r + 1, c + 1)) return false;
-      const q = pickQuad(rng);
-      shuffleInPlace(q, rng);
-      board[r][c] = q[0]; board[r][c + 1] = q[1];
-      board[r + 1][c] = q[2]; board[r + 1][c + 1] = q[3];
-      occ[r][c] = occ[r][c + 1] = occ[r + 1][c] = occ[r + 1][c + 1] = true;
-      return true;
-    }
-    if (kind === 'H3') {
-      if (c + 2 >= width || !fits(r, c) || !fits(r, c + 1) || !fits(r, c + 2)) return false;
-      const t = pickTriple(rng);
-      shuffleInPlace(t, rng);
-      board[r][c] = t[0]; board[r][c + 1] = t[1]; board[r][c + 2] = t[2];
-      occ[r][c] = occ[r][c + 1] = occ[r][c + 2] = true;
-      return true;
-    }
-    if (kind === 'V3') {
-      if (r + 2 >= height || !fits(r, c) || !fits(r + 1, c) || !fits(r + 2, c)) return false;
-      const t = pickTriple(rng);
-      shuffleInPlace(t, rng);
-      board[r][c] = t[0]; board[r + 1][c] = t[1]; board[r + 2][c] = t[2];
-      occ[r][c] = occ[r + 1][c] = occ[r + 2][c] = true;
-      return true;
-    }
-    return false;
-  };
-
-  for (const { r, c } of coords) {
-    if (occ[r][c]) continue;
-
-    // 가중치에 따라 후보 풀 만들고 셔플
-    const cands: BlockKind[] = [];
-    const pushW = (k: BlockKind, w: number) => {
-      const n = Math.max(1, Math.round(w * 5));
-      for (let i = 0; i < n; i++) cands.push(k);
-    };
-    pushW('H2', ratios.H2);
-    pushW('V2', ratios.V2);
-    pushW('S2x2', ratios.S2x2);
-    pushW('H3', ratios.H3);
-    pushW('V3', ratios.V3);
-    shuffleInPlace(cands, rng);
-
-    let ok = false;
-    for (const k of cands) {
-      if (place(k, r, c)) { ok = true; break; }
-    }
-    if (!ok) {
-      // 안전망: H2 → V2 순서로 강제
-      if (!(place('H2', r, c) || place('V2', r, c))) {
-        // 드문 케이스: 좌/상 역방향
-        if (c - 1 >= 0 && !occ[r][c - 1]) {
-          const [a, b] = weightedPickPair(rng);
-          board[r][c - 1] = a; board[r][c] = b;
-          occ[r][c - 1] = occ[r][c] = true;
-        } else if (r - 1 >= 0 && !occ[r - 1][c]) {
-          const [a, b] = weightedPickPair(rng);
-          board[r - 1][c] = a; board[r][c] = b;
-          occ[r - 1][c] = occ[r][c] = true;
-        } else {
-          board[r][c] = randInt(rng, 1, 9);
-          occ[r][c] = true;
-        }
-      }
-    }
-  }
-
-  return board;
 }
-
-/* =========================
-   React 컴포넌트
-========================= */
 
 const Board: React.FC = () => {
   const [score, setScore] = useState<number>(0);
   const [time, setTime] = useState<number>(MAX_TIME);
   const [isTimeOver, setIsTimeOver] = useState<boolean>(false);
   const [isMenuOpen, setIsMenuOpen] = useState<boolean>(false);
-  const [boardData, setBoardData] = useState<number[][]>(generateSolvableBoardWithBlocks());
+  const [isHelpOpen, setIsHelpOpen] = useState(false);
+  const [isAdModalOpen, setIsAdModalOpen] = useState<boolean>(false); // New state for ad modal
+  const [hearts, setHearts] = useState<number>(MAX_HEARTS); // New state for hearts
+  const [nextHeartChargeTime, setNextHeartChargeTime] = useState<number>(CHARGE_TIME_SECONDS); // New state for charge time
+  const [boardData, setBoardData] = useState<number[][]>(generateRandomBoard());
   const [selectedCells, setSelectedCells] = useState<Set<string>>(new Set());
   const [startCell, setStartCell] = useState<{ row: number; col: number } | null>(null);
   const [isAnimating, setIsAnimating] = useState<boolean>(false);
-  const [particles, setParticles] = useState<
-    { id: number; x: number; y: number; burstX: number; burstY: number }[]
-  >([]);
-  const [fallingApples, setFallingApples] = useState<
-    { id: number; x: number; y: number; width: number; height: number }[]
-  >([]);
+  const [particles, setParticles] = useState<{ id: number; x: number; y: number; burstX: number; burstY: number }[]>([]);
+  const [fallingApples, setFallingApples] = useState<{ id: number; x: number; y: number; width: number; height: number }[]>([]);
 
   const timerRef = useRef<number | null>(null);
+  const chargeTimerRef = useRef<number | null>(null); // Ref for heart charge timer
   const boardRef = useRef<HTMLDivElement>(null);
 
   const setCellSize = useCallback(() => {
@@ -247,10 +64,14 @@ const Board: React.FC = () => {
     return () => window.removeEventListener('resize', setCellSize);
   }, [setCellSize]);
 
+  // --- GAME TIMER LOGIC ---
   const startTimer = useCallback(() => {
-    if (timerRef.current !== null) window.clearInterval(timerRef.current);
+    if (timerRef.current !== null) {
+      window.clearInterval(timerRef.current);
+    }
     timerRef.current = window.setInterval(() => {
-      if (isMenuOpen) return;
+      if (isMenuOpen || isAdModalOpen) return; // Pause if menu or ad modal is open
+
       setTime(prevTime => {
         if (prevTime <= 10) {
           setIsTimeOver(true);
@@ -260,7 +81,7 @@ const Board: React.FC = () => {
         return prevTime - 10;
       });
     }, 10);
-  }, [isMenuOpen]);
+  }, [isMenuOpen, isAdModalOpen]); // Add isAdModalOpen to dependency array
 
   useEffect(() => {
     startTimer();
@@ -269,19 +90,52 @@ const Board: React.FC = () => {
     };
   }, [startTimer]);
 
+  // --- HEART CHARGE TIMER LOGIC ---
+  const startChargeTimer = useCallback(() => {
+    if (chargeTimerRef.current !== null) {
+      window.clearInterval(chargeTimerRef.current);
+    }
+    chargeTimerRef.current = window.setInterval(() => {
+      setNextHeartChargeTime(prevTime => {
+        if (prevTime <= 1) {
+          if (hearts < MAX_HEARTS) {
+            setHearts(prevHearts => prevHearts + 1);
+          }
+          return CHARGE_TIME_SECONDS; // Reset to 10 minutes
+        }
+        return prevTime - 1;
+      });
+    }, 1000); // Decrement every second
+  }, [hearts]); // Add hearts to dependency array
+
+  useEffect(() => {
+    startChargeTimer();
+    return () => {
+      if (chargeTimerRef.current !== null) window.clearInterval(chargeTimerRef.current);
+    };
+  }, [startChargeTimer]);
+
   const handleRestart = useCallback(() => {
     setScore(0);
     setTime(MAX_TIME);
     setIsTimeOver(false);
     setIsMenuOpen(false);
-    setBoardData(generateSolvableBoardWithBlocks());
+    setIsAdModalOpen(false); // Close ad modal on restart
+    setBoardData(generateRandomBoard());
     setSelectedCells(new Set());
     setStartCell(null);
     setIsAnimating(false);
     setParticles([]);
     setFallingApples([]);
     startTimer();
-  }, [startTimer]);
+    startChargeTimer(); // Restart charge timer
+  }, [startTimer, startChargeTimer]);
+
+  const handleWatchAd = useCallback(() => {
+    setHearts(MAX_HEARTS); // Refill hearts to MAX
+    setIsAdModalOpen(false); // Close ad modal
+    startChargeTimer(); // Restart charge timer
+  }, [startChargeTimer]);
 
   const getCellFromTouch = useCallback((touch: React.Touch) => {
     const target = document.elementFromPoint(touch.clientX, touch.clientY);
@@ -294,18 +148,18 @@ const Board: React.FC = () => {
 
   const handleTouchStart = useCallback(
     (e: React.TouchEvent) => {
-      if (isTimeOver || isAnimating || isMenuOpen) return;
+      if (isTimeOver || isAnimating || isMenuOpen || isAdModalOpen) return; // Pause if ad modal is open
       const cell = getCellFromTouch(e.touches[0]);
       if (!cell) return;
       setStartCell(cell);
       setSelectedCells(new Set([`${cell.row}-${cell.col}`]));
     },
-    [isTimeOver, isAnimating, isMenuOpen, getCellFromTouch]
+    [isTimeOver, isAnimating, isMenuOpen, isAdModalOpen, getCellFromTouch]
   );
 
   const handleTouchMove = useCallback(
     (e: React.TouchEvent) => {
-      if (isTimeOver || isAnimating || isMenuOpen) return;
+      if (isTimeOver || isAnimating || isMenuOpen || isAdModalOpen) return;
       if (!startCell) return;
       const current = getCellFromTouch(e.touches[0]);
       if (!current) return;
@@ -321,11 +175,11 @@ const Board: React.FC = () => {
       }
       setSelectedCells(newSelected);
     },
-    [isTimeOver, isAnimating, isMenuOpen, startCell, getCellFromTouch]
+    [isTimeOver, isAnimating, isMenuOpen, isAdModalOpen, startCell, getCellFromTouch]
   );
 
   const handleTouchEnd = useCallback(() => {
-    if (isTimeOver || isAnimating || isMenuOpen || selectedCells.size === 0) return;
+    if (isTimeOver || isAnimating || isMenuOpen || isAdModalOpen || selectedCells.size === 0) return;
 
     let sum = 0;
     selectedCells.forEach(key => {
@@ -400,14 +254,17 @@ const Board: React.FC = () => {
       setSelectedCells(new Set());
       setStartCell(null);
     }
-  }, [isTimeOver, isAnimating, isMenuOpen, selectedCells, boardData]);
+  }, [isTimeOver, isAnimating, isMenuOpen, isAdModalOpen, selectedCells, boardData]);
 
   return (
     <div className="game-container">
-      <GameHeader score={score} time={time} onMenuClick={() => setIsMenuOpen(true)} />
+      <GameHeader
+        score={score}
+        onMenuClick={() => setIsMenuOpen(true)}
+      />
 
       <div
-        className={`board ${isAnimating || isMenuOpen ? 'locked' : ''}`}
+        className={`board ${isAnimating || isMenuOpen || isAdModalOpen ? 'locked' : ''}`} // Lock board when ad modal is open
         ref={boardRef}
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
@@ -428,12 +285,17 @@ const Board: React.FC = () => {
         ))}
       </div>
 
-      <div className="ad-banner-placeholder">광고 배너 (Ad Banner)</div>
+      {/* Gauge is now inside GameHeader */}
+
+      <div className="ad-banner-placeholder">
+        광고 배너 (Ad Banner)
+      </div>
 
       <Menu
         isOpen={isMenuOpen}
         onClose={() => setIsMenuOpen(false)}
         onRestart={handleRestart}
+        onHelpClick={() => setIsHelpOpen(true)} // ✅ 여기서 함수 넘김
       />
 
       {isTimeOver && (
@@ -443,6 +305,29 @@ const Board: React.FC = () => {
           message={`최종 점수: ${score}`}
           primaryButtonText="다시하기"
           onPrimaryButtonClick={handleRestart}
+        />
+      )}
+
+      {isAdModalOpen && (
+        <Modal
+          isActive={true}
+          title="광고를 보고 하트를 충전하시겠어요?"
+          message={`현재 하트: ${hearts} / ${MAX_HEARTS}\n다음 충전까지: ${nextHeartChargeTime}초`}
+          primaryButtonText="광고 시청" // Watch Ad button
+          onPrimaryButtonClick={handleWatchAd}
+          showCloseButton={true} // X button
+          onSecondaryButtonClick={() => setIsAdModalOpen(false)} // Close ad modal
+        />
+      )}
+
+      {isHelpOpen && (
+        <Modal
+          isActive={true}
+          title="도움말"
+          message={`직사각형을 드래그해서 선택하고, 합이 10이면 사과가 제거됩니다.
+      모든 사과를 없애면 클리어입니다.`}
+          primaryButtonText="닫기"
+          onPrimaryButtonClick={() => setIsHelpOpen(false)}
         />
       )}
 
