@@ -1,3 +1,5 @@
+"use client";
+
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import GameHeader from './GameHeader';
@@ -11,17 +13,13 @@ const BOARD_WIDTH = 10;
 const BOARD_HEIGHT = 14; // 세로 한 줄 추가된 상태 유지
 const MAX_TIME = 100000;
 
+// ✅ 사과 깼을 때 +2초 고정 보상
+const CLEAR_BONUS_MS = 2000;
+
 const MAX_HEARTS = 5;
 const HEART_COOKIE = 'lives';
 
 /** ===================== 난이도 프리셋 ===================== */
-/**
- * weights: 세 가지 블록 타입의 가중치(상대값)
- *  - p12: 1x2 (두 칸 합 10)
- *  - p13: 1x3 (세 칸 합 10)
- *  - p22: 2x2 (네 칸 합 10)
- * timeBonusMs: 합10 제거 시 주는 보상(ms)
- */
 const DIFFICULTY_PRESETS: Record<
   number,
   { weights: { p12: number; p13: number; p22: number }; timeBonusMs: number }
@@ -53,13 +51,13 @@ const clamp = (n: number, min: number, max: number) => Math.max(min, Math.min(ma
 const P12_PATTERNS: number[][] = [
   [1,9],[2,8],[3,7],[4,6],[5,5],
 ];
-// 1x3 (합 10) — 순열 셔플해서 사용
+// 1x3 (합 10)
 const P13_PATTERNS_BASE: number[][] = [
   [1,1,8],[1,2,7],[1,3,6],[1,4,5],
   [2,2,6],[2,3,5],[2,4,4],
   [3,3,4],
 ];
-// 2x2 (합 10) — 행우선(4칸)으로 채움, 순열 셔플
+// 2x2 (합 10) — 행우선(4칸)
 const P22_PATTERNS_BASE: number[][] = [
   [1,2,3,4],[1,1,3,5],[1,2,2,5],[1,1,4,4],
   [2,2,2,4],[2,3,1,4],[3,3,2,2],
@@ -77,11 +75,6 @@ function shuffle<T>(arr: T[]): T[] {
 function permuted<T>(arr: T[]): T[] { return shuffle(arr); }
 
 /** ===================== 가로 분할(2와 3만 사용) ===================== */
-/**
- * 가로 10을 2와 3의 조합으로 분할(예: [2,2,3,3] 또는 [3,2,2,3] 등)
- * - 1칸 잔여가 절대로 안 생김
- * - 난수로 섞어 다양성 유지
- */
 function widthSegments10(): number[] {
   const candidates: number[][] = [
     [2,2,2,2,2],
@@ -95,37 +88,26 @@ function widthSegments10(): number[] {
 }
 
 /** ===================== 블록 배치(옵션2 전용) ===================== */
-/**
- * 한 밴드(1행 또는 2행)를 채운다.
- * - bandH: 1 또는 2
- * - weights: {p12,p13,p22} 가중치로 타입 고르기
- * - 2행일 때 width==2이면 (2x2)와 (1x2*2) 중 가중치로 선택
- * - 2행일 때 width==3이면 자동으로 (1x3 두 줄)
- * - 1행일 때는 1x2/1x3만 사용
- */
 function fillBand(
   board: number[][],
   startRow: number,
   bandH: number,
   weights: { p12: number; p13: number; p22: number },
 ) {
-  const widths = widthSegments10(); // [2,2,3,3] 등
+  const widths = widthSegments10();
   let c = 0;
 
-  // 미리 셔플한 패턴 풀(다양성↑)
   const P13_PATTERNS = shuffle(P13_PATTERNS_BASE);
   const P22_PATTERNS = shuffle(P22_PATTERNS_BASE);
 
   for (const w of widths) {
     if (bandH === 2) {
       if (w === 2) {
-        // 2x2 vs (1x2 x 2) 선택
         const total = weights.p22 + weights.p12;
         const r = Math.random() * total;
         const use22 = (r < weights.p22) && (startRow + 1 < BOARD_HEIGHT) && (c + 1 < BOARD_WIDTH);
 
         if (use22) {
-          // 2x2: 4칸을 패턴에서 뽑아 2x2로
           const flat = permuted(P22_PATTERNS[(Math.random() * P22_PATTERNS.length) | 0]);
           let k = 0;
           for (let dr = 0; dr < 2; dr++) {
@@ -134,7 +116,6 @@ function fillBand(
             }
           }
         } else {
-          // 1x2 두 줄
           for (let rrow = 0; rrow < 2; rrow++) {
             const pair = permuted(P12_PATTERNS[(Math.random() * P12_PATTERNS.length) | 0]);
             board[startRow + rrow][c + 0] = pair[0];
@@ -143,7 +124,6 @@ function fillBand(
         }
         c += 2;
       } else if (w === 3) {
-        // 1x3 두 줄
         for (let rrow = 0; rrow < 2; rrow++) {
           const trip = permuted(P13_PATTERNS[(Math.random() * P13_PATTERNS.length) | 0]);
           board[startRow + rrow][c + 0] = trip[0];
@@ -153,11 +133,9 @@ function fillBand(
         c += 3;
       }
     } else {
-      // bandH === 1: 1x2 또는 1x3만
-      // 가중치로 선택(2는 p12, 3은 p13)
       const total = weights.p12 + weights.p13;
       const r = Math.random() * total;
-      const choose3 = r >= weights.p12; // p13 쪽이 뽑힘
+      const choose3 = r >= weights.p12;
       const useW = choose3 ? 3 : 2;
 
       if (useW === 2) {
@@ -176,31 +154,23 @@ function fillBand(
   }
 }
 
-/**
- * 항상 클리어 가능한 보드 생성(옵션2):
- * - 위→아래로 내려가며 밴드(1행/2행) 단위로 채움
- * - 밴드 내부는 2와 3의 조합으로 가로 10을 정확히 분할
- * - 블록 타입은 1x2 / 1x3 / 2x2만 사용
- * - 안전장치: 생성 후 남은 0칸이 있으면 1x2 페어로 즉시 채움
- */
+/** 항상 클리어 가능한 보드 생성(옵션2) */
 function generateBoardOption2(weights: { p12: number; p13: number; p22: number }): number[][] {
   const board = Array.from({ length: BOARD_HEIGHT }, () => Array(BOARD_WIDTH).fill(0));
 
   let r = 0;
   while (r < BOARD_HEIGHT) {
     const canTwo = r + 1 < BOARD_HEIGHT;
-
-    // 난이도에 따라 2행 밴드를 조금 더 선호(하드 이상일수록 ↑)
     const twoRowBias =
-      (weights.p22 + weights.p13) / (weights.p12 + weights.p13 + weights.p22); // 0~1 대략적 지표
-    const twoRowProb = Math.min(0.8, 0.35 + twoRowBias * 0.4); // 0.35~0.75
+      (weights.p22 + weights.p13) / (weights.p12 + weights.p13 + weights.p22);
+    const twoRowProb = Math.min(0.8, 0.35 + twoRowBias * 0.4);
 
     const bandH = canTwo && Math.random() < twoRowProb ? 2 : 1;
     fillBand(board, r, bandH, weights);
     r += bandH;
   }
 
-  // ✅ 안전장치: 혹시라도 0이 남으면 무조건 1x2 페어로 메꿔 빈칸 방지
+  // 안전장치: 남은 0칸 즉시 1x2로 보정
   for (let rr = 0; rr < BOARD_HEIGHT; rr++) {
     for (let cc = 0; cc < BOARD_WIDTH; cc++) {
       if (board[rr][cc] === 0) {
@@ -210,7 +180,6 @@ function generateBoardOption2(weights: { p12: number; p13: number; p22: number }
           board[rr][cc + 1] = pair[1];
           cc++;
         } else if (cc - 1 >= 0) {
-          // 맨 오른쪽 1칸만 비었을 극히 드문 경우: 왼쪽 칸과 페어로 보정
           board[rr][cc - 1] = pair[0];
           board[rr][cc] = pair[1];
         }
@@ -232,7 +201,6 @@ const Board: React.FC = () => {
   const levelParam = Number(searchParams.get('level') ?? '3');
   const level = (levelParam >= 1 && levelParam <= 4) ? levelParam : 3;
   const preset = DIFFICULTY_PRESETS[level];
-  const TIME_BONUS_MS = preset.timeBonusMs;
 
   const [score, setScore] = useState(0);
   const [time, setTime] = useState(MAX_TIME);
@@ -267,26 +235,22 @@ const Board: React.FC = () => {
   const timerRef = useRef<number | null>(null);
   const boardRef = useRef<HTMLDivElement>(null);
 
-  /** ===== 셀 크기 계산 (Grid + 중앙 고정폭/고정높이 래퍼) ===== */
+  /** ===== 셀 크기 계산 ===== */
   const setCellSize = useCallback(() => {
     if (typeof document === "undefined" || !boardRef.current) return;
 
     const boardEl = boardRef.current;
-
-    // 보드가 차지 가능한 실제 영역
     const availW = boardEl.clientWidth;
     const availH = boardEl.clientHeight;
 
-    // 각 방향에서 가능한 최대 셀 크기
     const maxCellW = availW / BOARD_WIDTH;
     const maxCellH = availH / BOARD_HEIGHT;
 
-    const size = Math.floor(Math.min(maxCellW, maxCellH)); // 정사각형 유지 + 최대화
+    const size = Math.floor(Math.min(maxCellW, maxCellH));
     document.documentElement.style.setProperty("--cell-size", `${size}px`);
     document.documentElement.style.setProperty("--font-size", `${Math.max(12, Math.floor(size * 0.5))}px`);
     document.documentElement.style.setProperty("--cell-padding", `${Math.floor(size * 0.08)}px`);
 
-    // 래퍼 사이즈(그리드 전체 픽셀 크기)
     const wrapW = size * BOARD_WIDTH;
     const wrapH = size * BOARD_HEIGHT;
     document.documentElement.style.setProperty("--board-wrap-w", `${wrapW}px`);
@@ -295,7 +259,6 @@ const Board: React.FC = () => {
 
   useEffect(() => {
     setCellSize();
-    // iOS 주소창 리플로우 대응
     const onResize = () => setCellSize();
     window.addEventListener('resize', onResize);
     window.addEventListener('orientationchange', onResize);
@@ -326,7 +289,7 @@ const Board: React.FC = () => {
     return () => { if (timerRef.current !== null) window.clearInterval(timerRef.current); };
   }, [startTimer]);
 
-  /** ===== 페이지 진입 시: 리로드면 하트 1개 소모, 0개면 충전 유도 ===== */
+  /** ===== 페이지 진입: 리로드면 하트 1개 소모 ===== */
   useEffect(() => {
     const nav = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined;
     const isReload = nav?.type === 'reload';
@@ -335,7 +298,7 @@ const Board: React.FC = () => {
     if (isNaN(lives)) lives = MAX_HEARTS;
 
     if (isReload) {
-      lives = clamp(lives - 1, 0, MAX_HEARTS); // 새로고침 시 소모
+      lives = clamp(lives - 1, 0, MAX_HEARTS);
       setCookie(HEART_COOKIE, String(lives));
     }
 
@@ -372,7 +335,8 @@ const Board: React.FC = () => {
     startTimer();
   };
 
-  const handleRestart = useCallback(() => {
+  // useCallback을 굳이 쓰지 않아도 빌드는 문제없음(의존성 경고 회피)
+  const handleRestart = () => {
     const afterSpend = spendHeart(1);
     if (afterSpend <= 0) {
       setPendingRestart(true);
@@ -381,7 +345,7 @@ const Board: React.FC = () => {
       return;
     }
     doRestart();
-  }, []); // 최신 상태 참조 OK
+  };
 
   /** ===== 광고 선택 모달 버튼들 ===== */
   const openAdFlow = () => {
@@ -394,7 +358,6 @@ const Board: React.FC = () => {
     setAdPlayingOpen(false);
 
     if (adMode === 'recharge') {
-      // 하트 풀 충전
       setHearts(MAX_HEARTS);
       setCookie(HEART_COOKIE, String(MAX_HEARTS));
       if (pendingRestart) {
@@ -402,7 +365,6 @@ const Board: React.FC = () => {
         doRestart();
       }
     } else if (adMode === 'revive') {
-      // 이어하기: +60초
       setTime(prev => Math.min(MAX_TIME, prev + 60000));
       setIsTimeOver(false);
       startTimer();
@@ -461,7 +423,9 @@ const Board: React.FC = () => {
       const cleared = selectedCells.size;
 
       setScore(prev => prev + cleared);
-      setTime(prev => Math.min(MAX_TIME, prev + TIME_BONUS_MS)); // 난이도별 보상
+
+      // ✅ 합 10 성공 시 무조건 +2초 (2000ms)
+      setTime(prev => Math.min(MAX_TIME, prev + CLEAR_BONUS_MS));
 
       const newParticles: { id: number; x: number; y: number; burstX: number; burstY: number }[] = [];
       const newFalling: { id: number; x: number; y: number; width: number; height: number }[] = [];
@@ -513,7 +477,7 @@ const Board: React.FC = () => {
       setSelectedCells(new Set());
       setStartCell(null);
     }
-  }, [isTimeOver, isAnimating, isMenuOpen, adChoiceOpen, adPlayingOpen, selectedCells, boardData, TIME_BONUS_MS]);
+  }, [isTimeOver, isAnimating, isMenuOpen, adChoiceOpen, adPlayingOpen, selectedCells, boardData]);
 
   /** ===== 시간 종료 시: 점수 < 100 → 리바이브 제안 ===== */
   useEffect(() => {
@@ -583,7 +547,6 @@ const Board: React.FC = () => {
         onHelpClick={() => setIsHelpOpen(true)}
       />
 
-      {/* 기본 종료 모달(100점 이상인 경우) */}
       {isTimeOver && !adChoiceOpen && !adPlayingOpen && score >= 100 && (
         <Modal
           isActive
@@ -594,7 +557,6 @@ const Board: React.FC = () => {
         />
       )}
 
-      {/* 광고 선택 모달 (충전/리바이브 공용) */}
       {adChoiceOpen && (
         <Modal
           isActive
@@ -618,10 +580,8 @@ const Board: React.FC = () => {
         />
       )}
 
-      {/* 광고 재생(목업) — 홈과 동일한 스타일 */}
       {adPlayingOpen && <AdPlayingModal onClose={onAdFinished} />}
 
-      {/* 도움말 */}
       {isHelpOpen && (
         <Modal
           isActive
@@ -652,7 +612,7 @@ const Board: React.FC = () => {
 
 export default Board;
 
-/** ====== 광고 재생(목업) 모달: 홈과 동일한 UI ====== */
+/** ====== 광고 재생(목업) 모달 ====== */
 function AdPlayingModal({ onClose }: { onClose: () => void }) {
   return (
     <div className="modal-overlay">

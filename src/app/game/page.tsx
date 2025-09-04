@@ -1,11 +1,17 @@
 "use client";
 
-import Board from '@/components/Board';
+import React, { Suspense } from "react";
+import Board from "@/components/Board";
 
-export default function Home() {
+// 정적 프리렌더 중 CSR bailout 방지
+export const dynamic = "force-dynamic";
+
+export default function GamePage() {
   return (
     <div className="App">
-      <Board />
+      <Suspense fallback={<div />}>
+        <Board />
+      </Suspense>
     </div>
   );
 }
