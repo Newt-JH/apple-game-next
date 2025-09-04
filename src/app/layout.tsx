@@ -15,6 +15,9 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "사과 게임",
   description: "클리어하고 보상을 받아요 !",
+  icons: {
+    icon: '/favicon.png',
+  },
 };
 
 export default function RootLayout({

@@ -10,23 +10,23 @@ const COOKIE_DAYS = 365;
 
 // --- 안전한 쿠키 유틸 ---
 function setCookie(name: string, value: string, days = COOKIE_DAYS) {
-    if (typeof document === 'undefined') return; // SSR 방지
-    const d = new Date();
-    d.setTime(d.getTime() + days * 24 * 60 * 60 * 1000);
-    document.cookie = `${name}=${encodeURIComponent(value)};expires=${d.toUTCString()};path=/`;
+  if (typeof document === 'undefined') return; // SSR 방지
+  const d = new Date();
+  d.setTime(d.getTime() + days * 24 * 60 * 60 * 1000);
+  document.cookie = `${name}=${encodeURIComponent(value)};expires=${d.toUTCString()};path=/`;
+}
+function getCookie(name: string): string | null {
+  if (typeof document === 'undefined') return null; // SSR 방지
+  const pairs = document.cookie?.split(';') ?? [];
+  for (const p of pairs) {
+    const [k, ...rest] = p.trim().split('=');
+    if (k === name) return decodeURIComponent(rest.join('='));
   }
-  function getCookie(name: string): string | null {
-    if (typeof document === 'undefined') return null; // SSR 방지
-    const pairs = document.cookie?.split(';') ?? [];
-    for (const p of pairs) {
-      const [k, ...rest] = p.trim().split('=');
-      if (k === name) return decodeURIComponent(rest.join('='));
-    }
-    return null;
-  }
-  function clamp(n: number, min: number, max: number) {
-    return Math.max(min, Math.min(max, n));
-  }
+  return null;
+}
+function clamp(n: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, n));
+}
 
 type NoticeItem = {
   id: string;
@@ -49,6 +49,10 @@ export default function HomePage() {
   const [noticeDetail, setNoticeDetail] = useState<NoticeItem | null>(null);
   const [adAskOpen, setAdAskOpen] = useState(false);
   const [adPlayingOpen, setAdPlayingOpen] = useState(false);
+
+  // ✅ 난이도 선택 모달 상태
+  const [difficultyOpen, setDifficultyOpen] = useState(false);
+  const [selectedLevel, setSelectedLevel] = useState<number | null>(null);
 
   // 최초 쿠키 로드 + 즉시 풀충전 체크
   useEffect(() => {
@@ -96,17 +100,26 @@ export default function HomePage() {
     return `${m}:${String(s).padStart(2, '0')}`;
   };
 
-  // 게임 시작
-    const tryStartGame = () => {
+  // 게임 시작 버튼 클릭
+  const tryStartGame = () => {
     if (lives <= 0) {
       setAdAskOpen(true); // 하트 없음 → 광고 유도 모달
       return;
     }
-    const next = clamp(lives - 1, 0, MAX_LIVES);
+    // ✅ 하트 있을 때는 난이도 선택 모달 열기
+    setSelectedLevel(null);
+    setDifficultyOpen(true);
+  };
+
+  // 난이도 모달에서 "시작" 눌렀을 때
+  const confirmDifficultyAndStart = () => {
+    if (!selectedLevel) return; // 선택 필수
+    const next = clamp(lives - 1, 0, MAX_LIVES); // 여기서 하트 소모
     setLives(next);
     setCookie('lives', String(next));
     setCookie('lastRefill', String(lastRefill));
-    router.push('/game');
+    setDifficultyOpen(false);
+    router.push(`/game?level=${selectedLevel}`);
   };
 
   // 광고 플로우
@@ -189,6 +202,16 @@ export default function HomePage() {
             setNoticeDetail(null);
             setNoticeOpen(false);
           }}
+        />
+      )}
+
+      {/* ✅ 난이도 선택 모달 (공지와 동일 톤) */}
+      {difficultyOpen && (
+        <DifficultyModal
+          selectedLevel={selectedLevel}
+          onSelect={setSelectedLevel}
+          onStart={confirmDifficultyAndStart}
+          onClose={() => setDifficultyOpen(false)}
         />
       )}
     </main>
@@ -324,6 +347,62 @@ function NoticeModal({
             </div>
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+/** ===== 난이도 선택 모달 (공지와 동일 톤) ===== */
+function DifficultyModal({
+  selectedLevel,
+  onSelect,
+  onStart,
+  onClose,
+}: {
+  selectedLevel: number | null;
+  onSelect: (n: number) => void;
+  onStart: () => void;
+  onClose: () => void;
+}) {
+  // 버튼 라벨
+  const labels: Record<number, string> = {
+    1: 'Easy Mode',
+    2: 'Normal Mode',
+    3: 'Hard Mode',
+    4: 'Expert Mode',
+  };
+
+  return (
+    <div className="modal-overlay">
+      <div className="modal-notice">{/* 공지 모달과 같은 배경/톤 재사용 */}
+        <h2 className="modal-title">난이도 선택</h2>
+
+        {/* 선택 리스트 */}
+        <ul className="notice-list">
+          {[1,2,3,4].map((lvl) => (
+            <li
+              key={lvl}
+              className={`notice-item ${selectedLevel === lvl ? 'active' : ''}`}
+              onClick={() => onSelect(lvl)}
+              style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+            >
+              <div className="notice-title">{labels[lvl]}</div>
+              <div className="notice-date">Lv.{lvl}</div>
+            </li>
+          ))}
+        </ul>
+
+        <div className="modal-actions" style={{ gap: 8, justifyContent: 'space-between' }}>
+          <button
+            className="btn"
+            onClick={onStart}
+            disabled={!selectedLevel}
+            style={{ opacity: selectedLevel ? 1 : 0.6 }}
+          >
+            선택한 난이도로 시작
+          </button>
+          <button className="btn gray" onClick={onClose}>닫기</button>
+        </div>
       </div>
     </div>
   );

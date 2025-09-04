@@ -1,45 +1,95 @@
-.game-header {
+/* 얇은 한 줄 레이아웃 */
+.game-header.one-line {
   display: flex;
-  flex-direction: column; /* 세로 배치 */
-  justify-content: center;
-  align-items: stretch;
-  padding: 8px 12px;
-  background-color: #333;
-  border-radius: 10px;
-  margin: 10px;
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
-  box-sizing: border-box;
-}
-
-/* 상단: 점수 + 햄버거 */
-.header-top {
-  display: flex;
-  justify-content: space-between;
   align-items: center;
+  gap: 8px;
+  padding: 6px 10px;             /* 얇게 */
+  background-color: #333;         /* 기존 어두운 배경 유지 */
+  border-radius: 8px;
+  margin: 6px;                    /* 상하좌우 여백 살짝 */
+  box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+  box-sizing: border-box;
+  min-height: 40px;               /* 얇은 헤더 */
   color: #fff;
-  font-size: 18px;
-  font-weight: bold;
 }
 
-/* 게이지는 점수 아래쪽에 꽉 차게 */
+/* 좌측 점수 */
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  min-width: 88px;                /* 너무 눌리지 않게 최소폭 */
+}
+
+.score-label {
+  font-size: 12px;
+  opacity: 0.9;
+}
+
+.score-value {
+  font-weight: 700;
+  font-size: 16px;
+}
+
+/* 가운데 게이지: 가로로 확장 */
 .header-gauge {
-  margin-top: 6px; /* 점수랑 간격 */
+  position: relative;
+  flex: 1 1 auto;
+  height: 12px;                   /* 슬림 막대 */
+  border-radius: 9999px;
+  background: rgba(255,255,255,0.12); /* 트랙 */
+  border: 1px solid rgba(255,255,255,0.12);
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
-.menu-icon-button {
-  font-size: 28px;
+/* 더 얇게 원하면 slim 클래스에서만 조절 */
+.header-gauge.slim {
+  height: 10px;
+}
+
+.header-gauge-fill {
+  position: absolute;
+  inset: 0 auto 0 0;              /* 왼쪽 기준으로 채움 */
+  height: 100%;
+  width: 0%;
+  transition: width 40ms linear, background-color 80ms linear; /* 120ms → 80ms */
+  /* 색상은 TS에서 pct에 따라 solid로 주입 (초록→노랑→빨강) */
+}
+
+.header-gauge-text {
+  position: relative;             /* 중앙 텍스트 */
+  z-index: 1;
+  font-size: 10px;
+  font-weight: 700;
   color: #fff;
-  background-color: transparent;
+  text-shadow: 0 1px 0 rgba(0,0,0,0.4);
+  pointer-events: none;
+}
+
+/* 우측 햄버거 버튼 (원래 UI 유지) */
+.menu-icon-button {
+  width: 32px;
+  height: 28px;
+  border-radius: 6px;
   border: none;
-  padding: 0;
-  margin: 0;
+  background: transparent;        /* 투명 배경 유지 */
+  color: #fff;
   cursor: pointer;
+  position: relative;
+  display: grid;
+  place-items: center;
   transition: opacity 0.2s ease;
+  flex: 0 0 auto;
 }
 
 .menu-icon-button::before {
-  content: "☰"; /* ← 햄버거 아이콘 */
-  font-size: 28px;
+  content: "☰";                   /* 햄버거 아이콘 */
+  font-size: 20px;                /* 1줄 UI에 맞춰 축소 */
+  line-height: 1;
 }
 
 .menu-icon-button:hover {

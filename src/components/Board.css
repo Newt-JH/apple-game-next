@@ -1,5 +1,14 @@
+:root {
+  --cell-size: 32px;     /* JS에서 주입 */
+  --font-size: 16px;     /* JS에서 주입 */
+  --cell-padding: 2px;   /* JS에서 주입 */
+  --board-wrap-w: 320px; /* JS에서 주입: BOARD_WIDTH * --cell-size */
+  --board-wrap-h: 544px; /* JS에서 주입: BOARD_HEIGHT * --cell-size */
+}
+
+/* 글로벌: 모바일 주소창 대응 */
 html, body {
-  height: 100%;
+  height: 100dvh; /* 동적 뷰포트 */
   margin: 0;
   overflow: hidden;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
@@ -14,31 +23,46 @@ html, body {
   height: 100%;
   display: flex;
   flex-direction: column;
+  padding: 0;
+  box-sizing: border-box;
 }
 
+/* 보드 영역: 중앙 정렬 + 남는 공간 모두 차지 */
 .board {
-  flex-grow: 1;
+  flex: 1 1 auto;
   display: flex;
-  flex-direction: column;
-  gap: 1px;
-  padding: 5px 4px; /* Reduced vertical padding */
-  align-items: center;
-  justify-content: center;
+  align-items: flex-start;   /* 상단부터 */
+  justify-content: center;   /* 가로 중앙 */
+  padding: 0 2px;            /* 좌우 살짝만 */
   box-sizing: border-box;
   touch-action: none;
   overflow: hidden;
-}
-
-.board-row {
-  display: flex;
-  justify-content: center;
-  gap: 1px;
 }
 
 .board.locked {
   pointer-events: none;
 }
 
+/* 정확한 픽셀 사이즈로 내부 래퍼 고정 (가로/세로 딱 맞음) */
+.board-inner {
+  width: var(--board-wrap-w);
+  height: var(--board-wrap-h);
+  display: grid;
+  grid-template-columns: repeat(10, var(--cell-size));
+  grid-template-rows: repeat(14, var(--cell-size)); /* 17 → 14 */
+  gap: 0;
+}
+
+/* 셀: 정사각형 크기와 폰트/패딩 적용 */
+.board-inner .cell {
+  width: var(--cell-size);
+  height: var(--cell-size);
+  font-size: var(--font-size);
+  padding: var(--cell-padding);
+  box-sizing: border-box;
+}
+
+/* 떨어지는 사과 */
 .falling-apple-clone {
   position: absolute;
   background-image: url('../../public/apple.png');
@@ -50,31 +74,26 @@ html, body {
 }
 
 @keyframes apple-fall {
-  0% {
-    transform: translateY(0) scale(1);
-    opacity: 1;
-  }
-  100% {
-    transform: translateY(100vh) scale(0.8);
-    opacity: 0;
-  }
+  0% { transform: translateY(0) scale(1); opacity: 1; }
+  100% { transform: translateY(100vh) scale(0.8); opacity: 0; }
 }
 
+/* 광고 배너: 살짝만 공간 차지 */
 .ad-banner-placeholder {
-  height: 70px;
+  height: 56px; /* 더 붙이고 싶으면 48px/40px로 줄여도 됨 */
   background-color: #e0e0e0;
   color: #616161;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 16px;
+  font-size: 15px;
   font-weight: bold;
-  margin: 0 10px 10px 10px;
+  margin: 4px 6px 8px 6px;
   border-radius: 10px;
   flex-shrink: 0;
 }
 
-/* ===== 광고 재생(목업) 모달 ===== */
+/* 모달 공통 */
 .modal-overlay {
   position: fixed;
   inset: 0;
