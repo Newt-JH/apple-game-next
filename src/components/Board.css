@@ -74,6 +74,46 @@ html, body {
   box-sizing: border-box;
 }
 
+/* 선택된 셀들의 추가 시각적 효과 */
+.board-inner .cell.selected {
+  animation: selection-fade-in 0.2s ease-out;
+}
+
+/* 선택된 셀들이 자연스럽게 연결되도록 */
+
+@keyframes selection-fade-in {
+  0% {
+    filter: brightness(1);
+    outline-color: transparent;
+  }
+  100% {
+    filter: brightness(1.1);
+    outline-color: #ff4d4d;
+  }
+}
+
+/* 드래그 중 선택 영역의 배경 효과 */
+.board-inner:has(.cell.selected) {
+  position: relative;
+}
+
+.board-inner:has(.cell.selected)::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: radial-gradient(
+    ellipse at center,
+    rgba(255, 77, 77, 0.03) 0%,
+    rgba(255, 77, 77, 0.01) 40%,
+    transparent 70%
+  );
+  pointer-events: none;
+  z-index: 1;
+}
+
 /* 떨어지는 사과 */
 .falling-apple-clone {
   position: absolute;
