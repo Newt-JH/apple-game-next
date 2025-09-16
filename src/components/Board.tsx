@@ -481,6 +481,11 @@ const Board: React.FC = () => {
 
       selectedCells.forEach(key => {
         const [row, col] = key.split('-').map(Number);
+        const cellValue = boardData[row][col];
+
+        // 빈 셀(값이 0)은 애니메이션 생성하지 않음
+        if (cellValue === 0) return;
+
         const cellElement = (typeof document !== "undefined")
           ? document.querySelector(`[data-row="${row}"][data-col="${col}"]`) as HTMLElement | null
           : null;
