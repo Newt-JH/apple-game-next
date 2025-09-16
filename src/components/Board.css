@@ -17,6 +17,14 @@ html, body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   background-color: #f4e5a0;
+
+  /* 모바일에서 텍스트 선택 및 복사 팝업 방지 */
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .game-container {
@@ -25,6 +33,10 @@ html, body {
   flex-direction: column;
   padding: 0;
   box-sizing: border-box;
+
+  /* 모바일에서 스와이프 제스처 방지 */
+  overscroll-behavior: none;
+  -webkit-overscroll-behavior: none;
 }
 
 /* 보드 영역: 중앙 정렬 + 남는 공간 모두 차지 */

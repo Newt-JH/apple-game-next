@@ -527,8 +527,8 @@ const Board: React.FC = () => {
         });
       });
 
-      setParticles(newParticles);
-      setFallingApples(newFalling);
+      setParticles(prev => [...prev, ...newParticles]);
+      setFallingApples(prev => [...prev, ...newFalling]);
 
       setBoardData(prev => {
         const next = prev.map(r => [...r]);
@@ -542,16 +542,52 @@ const Board: React.FC = () => {
       setSelectedCells(new Set());
       setStartCell(null);
 
+      // 개별 애니메이션들이 자동으로 정리되도록 타이머 설정
+      newParticles.forEach(particle => {
+        window.setTimeout(() => {
+          setParticles(prev => prev.filter(p => p.id !== particle.id));
+        }, 1200);
+      });
+
+      newFalling.forEach(apple => {
+        window.setTimeout(() => {
+          setFallingApples(prev => prev.filter(a => a.id !== apple.id));
+        }, 1400);
+      });
+
       window.setTimeout(() => {
         setIsAnimating(false);
-        setParticles([]);
-        setFallingApples([]);
-      }, 1200);
+      }, 100);
     } else {
       setSelectedCells(new Set());
       setStartCell(null);
     }
   }, [isTimeOver, isMenuOpen, adChoiceOpen, adPlayingOpen, selectedCells, boardData]);
+
+  /** ===== 모바일에서 스와이프 뒤로가기 방지 ===== */
+  useEffect(() => {
+    const preventSwipeBack = (e: TouchEvent) => {
+      // 화면 가장자리에서 시작하는 스와이프를 감지하여 방지
+      const touch = e.touches[0];
+      if (touch && touch.clientX < 50) { // 왼쪽 가장자리 50px 이내
+        e.preventDefault();
+      }
+    };
+
+    const preventContextMenu = (e: Event) => {
+      e.preventDefault();
+    };
+
+    // 스와이프 뒤로가기 방지 (왼쪽 가장자리만)
+    document.addEventListener('touchstart', preventSwipeBack, { passive: false });
+    document.addEventListener('contextmenu', preventContextMenu);
+
+    // cleanup
+    return () => {
+      document.removeEventListener('touchstart', preventSwipeBack);
+      document.removeEventListener('contextmenu', preventContextMenu);
+    };
+  }, []);
 
   /** ===== 시간 종료 시: 점수 < 100 → 리바이브 제안 ===== */
   useEffect(() => {
