@@ -19,15 +19,10 @@ const CLEAR_BONUS_MS = 2000;
 const MAX_HEARTS = 5;
 const HEART_COOKIE = 'lives';
 
-/** ===================== 난이도 프리셋 ===================== */
-const DIFFICULTY_PRESETS: Record<
-  number,
-  { weights: { p12: number; p13: number; p22: number }; timeBonusMs: number }
-> = {
-  1: { weights: { p12: 70, p13: 20, p22: 10 }, timeBonusMs: 400 }, // Easy
-  2: { weights: { p12: 55, p13: 30, p22: 15 }, timeBonusMs: 300 }, // Normal
-  3: { weights: { p12: 40, p13: 35, p22: 25 }, timeBonusMs: 200 }, // Hard
-  4: { weights: { p12: 28, p13: 42, p22: 30 }, timeBonusMs: 180 }, // Expert
+/** ===================== 통합 난이도 설정 ===================== */
+const GAME_SETTINGS = {
+  weights: { p12: 50, p13: 30, p22: 20 }, // 균형잡힌 난이도
+  timeBonusMs: 250 // 중간 수준의 시간 보너스
 };
 
 /** ===================== 쿠키 유틸 ===================== */
@@ -47,18 +42,28 @@ const getCookie = (name: string): string | null => {
 const clamp = (n: number, min: number, max: number) => Math.max(min, Math.min(max, n));
 
 /** ===================== 패턴 화이트리스트 ===================== */
-// 1x2 (합 10)
-const P12_PATTERNS: number[][] = [
+// 1x2 가로 (합 10)
+const P12_H_PATTERNS: number[][] = [
   [1,9],[2,8],[3,7],[4,6],[5,5],
 ];
-// 1x3 (합 10)
-const P13_PATTERNS_BASE: number[][] = [
+// 2x1 세로 (합 10)
+const P21_V_PATTERNS: number[][] = [
+  [1,9],[2,8],[3,7],[4,6],[5,5],
+];
+// 1x3 가로 (합 10)
+const P13_H_PATTERNS: number[][] = [
+  [1,1,8],[1,2,7],[1,3,6],[1,4,5],
+  [2,2,6],[2,3,5],[2,4,4],
+  [3,3,4],
+];
+// 3x1 세로 (합 10)
+const P31_V_PATTERNS: number[][] = [
   [1,1,8],[1,2,7],[1,3,6],[1,4,5],
   [2,2,6],[2,3,5],[2,4,4],
   [3,3,4],
 ];
 // 2x2 (합 10) — 행우선(4칸)
-const P22_PATTERNS_BASE: number[][] = [
+const P22_PATTERNS: number[][] = [
   [1,2,3,4],[1,1,3,5],[1,2,2,5],[1,1,4,4],
   [2,2,2,4],[2,3,1,4],[3,3,2,2],
 ];
@@ -72,122 +77,177 @@ function shuffle<T>(arr: T[]): T[] {
   }
   return a;
 }
-function permuted<T>(arr: T[]): T[] { return shuffle(arr); }
 
-/** ===================== 가로 분할(2와 3만 사용) ===================== */
-function widthSegments10(): number[] {
-  const candidates: number[][] = [
-    [2,2,2,2,2],
-    [2,2,3,3],
-    [2,3,2,3],
-    [3,2,3,2],
-    [3,3,2,2],
-    [3,2,2,3],
-  ];
-  return shuffle(candidates)[0].slice();
-}
 
-/** ===================== 블록 배치(옵션2 전용) ===================== */
-function fillBand(
-  board: number[][],
-  startRow: number,
-  bandH: number,
-  weights: { p12: number; p13: number; p22: number },
-) {
-  const widths = widthSegments10();
-  let c = 0;
-
-  const P13_PATTERNS = shuffle(P13_PATTERNS_BASE);
-  const P22_PATTERNS = shuffle(P22_PATTERNS_BASE);
-
-  for (const w of widths) {
-    if (bandH === 2) {
-      if (w === 2) {
-        const total = weights.p22 + weights.p12;
-        const r = Math.random() * total;
-        const use22 = (r < weights.p22) && (startRow + 1 < BOARD_HEIGHT) && (c + 1 < BOARD_WIDTH);
-
-        if (use22) {
-          const flat = permuted(P22_PATTERNS[(Math.random() * P22_PATTERNS.length) | 0]);
-          let k = 0;
-          for (let dr = 0; dr < 2; dr++) {
-            for (let dc = 0; dc < 2; dc++) {
-              board[startRow + dr][c + dc] = flat[k++];
-            }
-          }
-        } else {
-          for (let rrow = 0; rrow < 2; rrow++) {
-            const pair = permuted(P12_PATTERNS[(Math.random() * P12_PATTERNS.length) | 0]);
-            board[startRow + rrow][c + 0] = pair[0];
-            board[startRow + rrow][c + 1] = pair[1];
-          }
-        }
-        c += 2;
-      } else if (w === 3) {
-        for (let rrow = 0; rrow < 2; rrow++) {
-          const trip = permuted(P13_PATTERNS[(Math.random() * P13_PATTERNS.length) | 0]);
-          board[startRow + rrow][c + 0] = trip[0];
-          board[startRow + rrow][c + 1] = trip[1];
-          board[startRow + rrow][c + 2] = trip[2];
-        }
-        c += 3;
-      }
-    } else {
-      const total = weights.p12 + weights.p13;
-      const r = Math.random() * total;
-      const choose3 = r >= weights.p12;
-      const useW = choose3 ? 3 : 2;
-
-      if (useW === 2) {
-        const pair = permuted(P12_PATTERNS[(Math.random() * P12_PATTERNS.length) | 0]);
-        board[startRow][c + 0] = pair[0];
-        board[startRow][c + 1] = pair[1];
-        c += 2;
-      } else {
-        const trip = permuted(P13_PATTERNS[(Math.random() * P13_PATTERNS.length) | 0]);
-        board[startRow][c + 0] = trip[0];
-        board[startRow][c + 1] = trip[1];
-        board[startRow][c + 2] = trip[2];
-        c += 3;
-      }
-    }
-  }
-}
-
-/** 항상 클리어 가능한 보드 생성(옵션2) */
-function generateBoardOption2(weights: { p12: number; p13: number; p22: number }): number[][] {
+/** 무조건 클리어 가능한 향상된 보드 생성 */
+function generateGuaranteedBoard(_weights: { p12: number; p13: number; p22: number }): number[][] {
   const board = Array.from({ length: BOARD_HEIGHT }, () => Array(BOARD_WIDTH).fill(0));
 
-  let r = 0;
-  while (r < BOARD_HEIGHT) {
-    const canTwo = r + 1 < BOARD_HEIGHT;
-    const twoRowBias =
-      (weights.p22 + weights.p13) / (weights.p12 + weights.p13 + weights.p22);
-    const twoRowProb = Math.min(0.8, 0.35 + twoRowBias * 0.4);
+  // 가로/세로 패턴을 랜덤하게 섞어서 배치
+  const useVerticalBias = Math.random();
 
-    const bandH = canTwo && Math.random() < twoRowProb ? 2 : 1;
-    fillBand(board, r, bandH, weights);
-    r += bandH;
+  if (useVerticalBias < 0.3) {
+    // 30% 확률로 세로 패턴 위주
+    fillVerticalPatterns(board);
+  } else if (useVerticalBias < 0.6) {
+    // 30% 확률로 가로 패턴 위주
+    fillHorizontalPatterns(board);
+  } else {
+    // 40% 확률로 혼합 패턴
+    fillMixedPatterns(board);
   }
 
-  // 안전장치: 남은 0칸 즉시 1x2로 보정
-  for (let rr = 0; rr < BOARD_HEIGHT; rr++) {
-    for (let cc = 0; cc < BOARD_WIDTH; cc++) {
-      if (board[rr][cc] === 0) {
-        const pair = P12_PATTERNS[Math.floor(Math.random() * P12_PATTERNS.length)];
-        board[rr][cc] = pair[0];
-        if (cc + 1 < BOARD_WIDTH) {
-          board[rr][cc + 1] = pair[1];
-          cc++;
-        } else if (cc - 1 >= 0) {
-          board[rr][cc - 1] = pair[0];
-          board[rr][cc] = pair[1];
+  // 안전장치: 빈 칸이 있으면 강제로 합 10 패턴으로 채우기
+  ensureAllCellsFilled(board);
+
+  return board;
+}
+
+/** 세로 패턴 위주로 보드 채우기 */
+function fillVerticalPatterns(board: number[][]) {
+  for (let c = 0; c < BOARD_WIDTH; c++) {
+    let r = 0;
+    while (r < BOARD_HEIGHT) {
+      const remainingHeight = BOARD_HEIGHT - r;
+
+      if (remainingHeight >= 3 && Math.random() < 0.4) {
+        // 3x1 세로 패턴
+        const pattern = shuffle(P31_V_PATTERNS)[0];
+        for (let i = 0; i < 3; i++) {
+          board[r + i][c] = pattern[i];
+        }
+        r += 3;
+      } else if (remainingHeight >= 2) {
+        // 2x1 세로 패턴
+        const pattern = shuffle(P21_V_PATTERNS)[0];
+        board[r][c] = pattern[0];
+        board[r + 1][c] = pattern[1];
+        r += 2;
+      } else {
+        // 남은 1칸은 다음 열에서 처리
+        break;
+      }
+    }
+  }
+}
+
+/** 가로 패턴 위주로 보드 채우기 */
+function fillHorizontalPatterns(board: number[][]) {
+  for (let r = 0; r < BOARD_HEIGHT; r++) {
+    let c = 0;
+    while (c < BOARD_WIDTH) {
+      const remainingWidth = BOARD_WIDTH - c;
+
+      if (remainingWidth >= 3 && Math.random() < 0.4) {
+        // 1x3 가로 패턴
+        const pattern = shuffle(P13_H_PATTERNS)[0];
+        for (let i = 0; i < 3; i++) {
+          board[r][c + i] = pattern[i];
+        }
+        c += 3;
+      } else if (remainingWidth >= 2) {
+        // 1x2 가로 패턴
+        const pattern = shuffle(P12_H_PATTERNS)[0];
+        board[r][c] = pattern[0];
+        board[r][c + 1] = pattern[1];
+        c += 2;
+      } else {
+        // 남은 1칸은 다음 행에서 처리
+        break;
+      }
+    }
+  }
+}
+
+/** 혼합 패턴으로 보드 채우기 */
+function fillMixedPatterns(board: number[][]) {
+  // 2x2 패턴을 몇 개 배치
+  for (let r = 0; r < BOARD_HEIGHT - 1; r += 2) {
+    for (let c = 0; c < BOARD_WIDTH - 1; c += 2) {
+      if (Math.random() < 0.3) {
+        const pattern = shuffle(P22_PATTERNS)[0];
+        let k = 0;
+        for (let dr = 0; dr < 2; dr++) {
+          for (let dc = 0; dc < 2; dc++) {
+            board[r + dr][c + dc] = pattern[k++];
+          }
         }
       }
     }
   }
 
-  return board;
+  // 나머지 공간을 가로/세로 패턴으로 채우기
+  for (let r = 0; r < BOARD_HEIGHT; r++) {
+    for (let c = 0; c < BOARD_WIDTH; c++) {
+      if (board[r][c] === 0) {
+        // 가로 패턴 시도
+        if (c + 1 < BOARD_WIDTH && board[r][c + 1] === 0) {
+          const pattern = shuffle(P12_H_PATTERNS)[0];
+          board[r][c] = pattern[0];
+          board[r][c + 1] = pattern[1];
+        }
+        // 세로 패턴 시도
+        else if (r + 1 < BOARD_HEIGHT && board[r + 1][c] === 0) {
+          const pattern = shuffle(P21_V_PATTERNS)[0];
+          board[r][c] = pattern[0];
+          board[r + 1][c] = pattern[1];
+        }
+      }
+    }
+  }
+}
+
+/** 모든 셀이 채워졌는지 확인하고 빈 칸 처리 */
+function ensureAllCellsFilled(board: number[][]) {
+  for (let r = 0; r < BOARD_HEIGHT; r++) {
+    for (let c = 0; c < BOARD_WIDTH; c++) {
+      if (board[r][c] === 0) {
+        // 인접한 빈 칸과 합쳐서 패턴 만들기
+        if (c + 1 < BOARD_WIDTH && board[r][c + 1] === 0) {
+          const pattern = shuffle(P12_H_PATTERNS)[0];
+          board[r][c] = pattern[0];
+          board[r][c + 1] = pattern[1];
+        } else if (r + 1 < BOARD_HEIGHT && board[r + 1][c] === 0) {
+          const pattern = shuffle(P21_V_PATTERNS)[0];
+          board[r][c] = pattern[0];
+          board[r + 1][c] = pattern[1];
+        } else {
+          // 혼자 남은 칸은 인접 칸과 맞춰서 합 10 만들기
+          fillSingleCell(board, r, c);
+        }
+      }
+    }
+  }
+}
+
+/** 단일 빈 칸을 인접 칸과 맞춰서 채우기 */
+function fillSingleCell(board: number[][], r: number, c: number) {
+  // 인접한 칸 중 0이 아닌 칸 찾기
+  const neighbors = [];
+  if (r > 0 && board[r-1][c] !== 0) neighbors.push({r: r-1, c, val: board[r-1][c]});
+  if (r < BOARD_HEIGHT-1 && board[r+1][c] !== 0) neighbors.push({r: r+1, c, val: board[r+1][c]});
+  if (c > 0 && board[r][c-1] !== 0) neighbors.push({r, c: c-1, val: board[r][c-1]});
+  if (c < BOARD_WIDTH-1 && board[r][c+1] !== 0) neighbors.push({r, c: c+1, val: board[r][c+1]});
+
+  if (neighbors.length > 0) {
+    // 인접 칸과 합쳐서 10이 되도록 설정
+    const neighbor = neighbors[0];
+    const targetSum = 10;
+    const currentSum = neighbor.val;
+    const needed = targetSum - currentSum;
+
+    if (needed > 0 && needed <= 9) {
+      board[r][c] = needed;
+      // 기존 패턴을 새로운 패턴으로 교체
+      board[neighbor.r][neighbor.c] = currentSum;
+    } else {
+      // 안전한 기본값
+      board[r][c] = Math.floor(Math.random() * 9) + 1;
+    }
+  } else {
+    // 인접 칸이 없으면 기본값
+    board[r][c] = Math.floor(Math.random() * 9) + 1;
+  }
 }
 
 /** ===================== 타입 및 컴포넌트 ===================== */
@@ -197,11 +257,6 @@ const Board: React.FC = () => {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  // 쿼리에서 난이도(level=1|2|3|4) 가져오기. 기본 3(Hard).
-  const levelParam = Number(searchParams.get('level') ?? '3');
-  const level = (levelParam >= 1 && levelParam <= 4) ? levelParam : 3;
-  const preset = DIFFICULTY_PRESETS[level];
-
   const [score, setScore] = useState(0);
   const [time, setTime] = useState(MAX_TIME);
   const [isTimeOver, setIsTimeOver] = useState(false);
@@ -210,7 +265,7 @@ const Board: React.FC = () => {
   const [isHelpOpen, setIsHelpOpen] = useState(false);
 
   const [boardData, setBoardData] = useState<number[][]>(() =>
-    generateBoardOption2(preset.weights)
+    generateGuaranteedBoard(GAME_SETTINGS.weights)
   );
   const [selectedCells, setSelectedCells] = useState<Set<string>>(new Set());
   const [startCell, setStartCell] = useState<{ row: number; col: number } | null>(null);
@@ -326,7 +381,7 @@ const Board: React.FC = () => {
     setTime(MAX_TIME);
     setIsTimeOver(false);
     setIsMenuOpen(false);
-    setBoardData(generateBoardOption2(preset.weights));
+    setBoardData(generateGuaranteedBoard(GAME_SETTINGS.weights));
     setSelectedCells(new Set());
     setStartCell(null);
     setIsAnimating(false);
@@ -411,13 +466,7 @@ const Board: React.FC = () => {
   const handleTouchEnd = useCallback(() => {
     if (isTimeOver || isAnimating || isMenuOpen || adChoiceOpen || adPlayingOpen || selectedCells.size === 0) return;
 
-    let sum = 0;
-    selectedCells.forEach(key => {
-      const [row, col] = key.split('-').map(Number);
-      sum += boardData[row][col];
-    });
-
-    const isValid = sum === 10 && selectedCells.size >= 2;
+    const isValid = isValidPattern(selectedCells, boardData);
     if (isValid) {
       setIsAnimating(true);
       const cleared = selectedCells.size;
@@ -609,6 +658,61 @@ const Board: React.FC = () => {
     </div>
   );
 };
+
+/** 선택된 셀들이 유효한 패턴인지 확인 */
+function isValidPattern(selectedCells: Set<string>, boardData: number[][]): boolean {
+  if (selectedCells.size < 2) return false;
+
+  // 선택된 셀들의 합계 계산
+  let sum = 0;
+  const cells: Array<{ r: number; c: number }> = [];
+
+  selectedCells.forEach(key => {
+    const [row, col] = key.split('-').map(Number);
+    const value = boardData[row][col];
+    sum += value;
+    cells.push({ r: row, c: col });
+  });
+
+  // 합이 10이 아니면 무효
+  if (sum !== 10) return false;
+
+  // 셀들이 연속적인 직사각형을 형성하는지 확인
+  if (!isValidRectangle(cells)) return false;
+
+  return true;
+}
+
+/** 선택된 셀들이 유효한 직사각형 패턴인지 확인 */
+function isValidRectangle(cells: Array<{ r: number; c: number }>): boolean {
+  if (cells.length === 0) return false;
+
+  const rows = cells.map(cell => cell.r);
+  const cols = cells.map(cell => cell.c);
+
+  const minR = Math.min(...rows);
+  const maxR = Math.max(...rows);
+  const minC = Math.min(...cols);
+  const maxC = Math.max(...cols);
+
+  const expectedCells = (maxR - minR + 1) * (maxC - minC + 1);
+
+  // 선택된 셀 수가 예상 직사각형 크기와 일치하는지 확인
+  if (cells.length !== expectedCells) return false;
+
+  // 모든 셀이 직사각형 영역 내에 있는지 확인
+  const cellSet = new Set(cells.map(cell => `${cell.r}-${cell.c}`));
+  for (let r = minR; r <= maxR; r++) {
+    for (let c = minC; c <= maxC; c++) {
+      if (!cellSet.has(`${r}-${c}`)) {
+        return false;
+      }
+    }
+  }
+
+  // 직사각형이면 유효 (크기 제한 없음)
+  return true;
+}
 
 export default Board;
 
