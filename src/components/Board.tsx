@@ -195,6 +195,7 @@ const Board: React.FC = () => {
   const [adChoiceOpen, setAdChoiceOpen] = useState(false);
   const [adPlayingOpen, setAdPlayingOpen] = useState(false);
   const [pendingRestart, setPendingRestart] = useState(false);
+  const [isGameSuccess, setIsGameSuccess] = useState(false);
 
   const timerRef = useRef<number | null>(null);
   const boardRef = useRef<HTMLDivElement>(null);
@@ -236,7 +237,7 @@ const Board: React.FC = () => {
   const startTimer = useCallback(() => {
     if (timerRef.current !== null) window.clearInterval(timerRef.current);
     timerRef.current = window.setInterval(() => {
-      if (isMenuOpen || adChoiceOpen || adPlayingOpen) return;
+      if (isMenuOpen || adChoiceOpen || adPlayingOpen || isGameSuccess) return;
       setTime(prev => {
         if (prev <= 10) {
           if (!isTimeOver) setIsTimeOver(true);
@@ -246,7 +247,7 @@ const Board: React.FC = () => {
         return prev - 10;
       });
     }, 10);
-  }, [isMenuOpen, adChoiceOpen, adPlayingOpen, isTimeOver]);
+  }, [isMenuOpen, adChoiceOpen, adPlayingOpen, isTimeOver, isGameSuccess]);
 
   useEffect(() => {
     startTimer();
@@ -311,6 +312,20 @@ const Board: React.FC = () => {
     doRestart();
   };
 
+  // 게임 성공 후 다시하기 (하트 소모)
+  const handleRetry = () => {
+    const afterSpend = spendHeart(1);
+    if (afterSpend <= 0) {
+      setPendingRestart(true);
+      setAdMode('recharge');
+      setAdChoiceOpen(true);
+      setIsGameSuccess(false); // 성공 모달 닫기
+      return;
+    }
+    setIsGameSuccess(false); // 성공 모달 닫기
+    doRestart();
+  };
+
   /** ===== 광고 선택 모달 버튼들 ===== */
   const openAdFlow = () => {
     setAdChoiceOpen(false);
@@ -347,7 +362,7 @@ const Board: React.FC = () => {
   }, []);
 
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
-    if (isTimeOver || isMenuOpen || adChoiceOpen || adPlayingOpen) return;
+    if (isTimeOver || isMenuOpen || adChoiceOpen || adPlayingOpen || isGameSuccess) return;
     const cell = getCellFromTouch(e.touches[0]);
     if (!cell) return;
     setStartCell(cell);
@@ -355,7 +370,7 @@ const Board: React.FC = () => {
   }, [isTimeOver, isMenuOpen, adChoiceOpen, adPlayingOpen, getCellFromTouch]);
 
   const handleTouchMove = useCallback((e: React.TouchEvent) => {
-    if (isTimeOver || isMenuOpen || adChoiceOpen || adPlayingOpen) return;
+    if (isTimeOver || isMenuOpen || adChoiceOpen || adPlayingOpen || isGameSuccess) return;
     if (!startCell) return;
     const current = getCellFromTouch(e.touches[0]);
     if (!current) return;
@@ -445,6 +460,21 @@ const Board: React.FC = () => {
           const [r, c] = key.split('-').map(Number);
           next[r][c] = 0;
         });
+
+        // 게임 성공 체크: 모든 사과가 0인지 확인
+        const hasAnyApples = next.some(row => row.some(cell => cell !== 0));
+        if (!hasAnyApples) {
+          // 모든 사과가 클리어됨 - 성공!
+          setTimeout(() => {
+            setIsGameSuccess(true);
+            // 타이머 정지
+            if (timerRef.current !== null) {
+              window.clearInterval(timerRef.current);
+              timerRef.current = null;
+            }
+          }, 200); // 애니메이션이 시작된 후 잠시 후에 모달 표시
+        }
+
         return next;
       });
 
@@ -528,7 +558,7 @@ const Board: React.FC = () => {
       />
 
       <div
-        className={`board ${isMenuOpen || adChoiceOpen || adPlayingOpen ? 'locked' : ''}`}
+        className={`board ${isMenuOpen || adChoiceOpen || adPlayingOpen || isGameSuccess ? 'locked' : ''}`}
         ref={boardRef}
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
@@ -608,6 +638,18 @@ const Board: React.FC = () => {
           message={`직사각형을 드래그해서 선택하고, 합이 10이면 사과가 제거됩니다.\n모든 사과를 없애면 클리어입니다.`}
           primaryButtonText="닫기"
           onPrimaryButtonClick={() => setIsHelpOpen(false)}
+        />
+      )}
+
+      {isGameSuccess && (
+        <Modal
+          isActive
+          title="🎉 게임 클리어!"
+          message={`모든 사과를 제거했습니다!\n최종 점수: ${score}`}
+          primaryButtonText="다시하기"
+          onPrimaryButtonClick={handleRetry}
+          secondaryButtonText="홈으로"
+          onSecondaryButtonClick={() => router.push('/home')}
         />
       )}
 
