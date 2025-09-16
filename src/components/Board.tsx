@@ -274,7 +274,7 @@ const Board: React.FC = () => {
     { id: number; x: number; y: number; burstX: number; burstY: number }[]
   >([]);
   const [fallingApples, setFallingApples] = useState<
-    { id: number; x: number; y: number; width: number; height: number }[]
+    { id: number; x: number; y: number; width: number; height: number; direction: number }[]
   >([]);
 
   // 하트/광고 플로우
@@ -438,15 +438,15 @@ const Board: React.FC = () => {
   }, []);
 
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
-    if (isTimeOver || isAnimating || isMenuOpen || adChoiceOpen || adPlayingOpen) return;
+    if (isTimeOver || isMenuOpen || adChoiceOpen || adPlayingOpen) return;
     const cell = getCellFromTouch(e.touches[0]);
     if (!cell) return;
     setStartCell(cell);
     setSelectedCells(new Set([`${cell.row}-${cell.col}`]));
-  }, [isTimeOver, isAnimating, isMenuOpen, adChoiceOpen, adPlayingOpen, getCellFromTouch]);
+  }, [isTimeOver, isMenuOpen, adChoiceOpen, adPlayingOpen, getCellFromTouch]);
 
   const handleTouchMove = useCallback((e: React.TouchEvent) => {
-    if (isTimeOver || isAnimating || isMenuOpen || adChoiceOpen || adPlayingOpen) return;
+    if (isTimeOver || isMenuOpen || adChoiceOpen || adPlayingOpen) return;
     if (!startCell) return;
     const current = getCellFromTouch(e.touches[0]);
     if (!current) return;
@@ -461,10 +461,10 @@ const Board: React.FC = () => {
       }
     }
     setSelectedCells(newSelected);
-  }, [isTimeOver, isAnimating, isMenuOpen, adChoiceOpen, adPlayingOpen, startCell, getCellFromTouch]);
+  }, [isTimeOver, isMenuOpen, adChoiceOpen, adPlayingOpen, startCell, getCellFromTouch]);
 
   const handleTouchEnd = useCallback(() => {
-    if (isTimeOver || isAnimating || isMenuOpen || adChoiceOpen || adPlayingOpen || selectedCells.size === 0) return;
+    if (isTimeOver || isMenuOpen || adChoiceOpen || adPlayingOpen || selectedCells.size === 0) return;
 
     const isValid = isValidPattern(selectedCells, boardData);
     if (isValid) {
@@ -477,7 +477,16 @@ const Board: React.FC = () => {
       setTime(prev => Math.min(MAX_TIME, prev + CLEAR_BONUS_MS));
 
       const newParticles: { id: number; x: number; y: number; burstX: number; burstY: number }[] = [];
-      const newFalling: { id: number; x: number; y: number; width: number; height: number }[] = [];
+      const newFalling: { id: number; x: number; y: number; width: number; height: number; direction: number }[] = [];
+
+      // 선택된 셀들의 위치 정보를 계산해서 방향성 결정
+      const cellPositions = Array.from(selectedCells).map(key => {
+        const [row, col] = key.split('-').map(Number);
+        return { row, col, key };
+      }).filter(({ row, col }) => boardData[row][col] !== 0);
+
+      // 가운데 위치 계산
+      const avgCol = cellPositions.reduce((sum, pos) => sum + pos.col, 0) / cellPositions.length;
 
       selectedCells.forEach(key => {
         const [row, col] = key.split('-').map(Number);
@@ -493,6 +502,10 @@ const Board: React.FC = () => {
         const rect = cellElement.getBoundingClientRect();
         const startX = rect.left;
         const startY = rect.top;
+
+        // 현재 셀이 평균보다 왼쪽인지 오른쪽인지 결정
+        const direction = col < avgCol ? -1 : col > avgCol ? 1 : 0; // -1: 왼쪽, 0: 가운데, 1: 오른쪽
+
         for (let i = 0; i < 8; i++) {
           const burstX = (Math.random() - 0.5) * 80;
           const burstY = (Math.random() - 0.5) * 80;
@@ -504,7 +517,14 @@ const Board: React.FC = () => {
             burstY,
           });
         }
-        newFalling.push({ id: Date.now() + Math.random(), x: startX, y: startY, width: rect.width, height: rect.height });
+        newFalling.push({
+          id: Date.now() + Math.random(),
+          x: startX,
+          y: startY,
+          width: rect.width,
+          height: rect.height,
+          direction
+        });
       });
 
       setParticles(newParticles);
@@ -531,7 +551,7 @@ const Board: React.FC = () => {
       setSelectedCells(new Set());
       setStartCell(null);
     }
-  }, [isTimeOver, isAnimating, isMenuOpen, adChoiceOpen, adPlayingOpen, selectedCells, boardData]);
+  }, [isTimeOver, isMenuOpen, adChoiceOpen, adPlayingOpen, selectedCells, boardData]);
 
   /** ===== 시간 종료 시: 점수 < 100 → 리바이브 제안 ===== */
   useEffect(() => {
@@ -563,7 +583,7 @@ const Board: React.FC = () => {
       />
 
       <div
-        className={`board ${isAnimating || isMenuOpen || adChoiceOpen || adPlayingOpen ? 'locked' : ''}`}
+        className={`board ${isMenuOpen || adChoiceOpen || adPlayingOpen ? 'locked' : ''}`}
         ref={boardRef}
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
@@ -651,7 +671,7 @@ const Board: React.FC = () => {
       {fallingApples.map(apple => (
         <div
           key={apple.id}
-          className="falling-apple-clone"
+          className={`falling-apple-clone direction-${apple.direction === -1 ? 'left' : apple.direction === 1 ? 'right' : 'center'}`}
           style={{
             left: `${apple.x}px`,
             top: `${apple.y}px`,
