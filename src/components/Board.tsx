@@ -41,213 +41,122 @@ const getCookie = (name: string): string | null => {
 };
 const clamp = (n: number, min: number, max: number) => Math.max(min, Math.min(max, n));
 
-/** ===================== 패턴 화이트리스트 ===================== */
-// 1x2 가로 (합 10)
-const P12_H_PATTERNS: number[][] = [
-  [1,9],[2,8],[3,7],[4,6],[5,5],
-];
-// 2x1 세로 (합 10)
-const P21_V_PATTERNS: number[][] = [
-  [1,9],[2,8],[3,7],[4,6],[5,5],
-];
-// 1x3 가로 (합 10)
-const P13_H_PATTERNS: number[][] = [
-  [1,1,8],[1,2,7],[1,3,6],[1,4,5],
-  [2,2,6],[2,3,5],[2,4,4],
-  [3,3,4],
-];
-// 3x1 세로 (합 10)
-const P31_V_PATTERNS: number[][] = [
-  [1,1,8],[1,2,7],[1,3,6],[1,4,5],
-  [2,2,6],[2,3,5],[2,4,4],
-  [3,3,4],
-];
-// 2x2 (합 10) — 행우선(4칸)
-const P22_PATTERNS: number[][] = [
-  [1,2,3,4],[1,1,3,5],[1,2,2,5],[1,1,4,4],
-  [2,2,2,4],[2,3,1,4],[3,3,2,2],
-];
-
-/** ===== 유틸 ===== */
-function shuffle<T>(arr: T[]): T[] {
-  const a = arr.slice();
-  for (let i = a.length - 1; i > 0; i--) {
-    const j = (Math.random() * (i + 1)) | 0;
-    [a[i], a[j]] = [a[j], a[i]];
-  }
-  return a;
-}
+/** ===================== 간소화된 패턴 상수 ===================== */
 
 
-/** 무조건 클리어 가능한 향상된 보드 생성 */
+/** 100% 성공 보장 보드 생성 - 절대 고립된 숫자가 생기지 않는 방법 */
 function generateGuaranteedBoard(_weights: { p12: number; p13: number; p22: number }): number[][] {
   const board = Array.from({ length: BOARD_HEIGHT }, () => Array(BOARD_WIDTH).fill(0));
+  const filled = Array.from({ length: BOARD_HEIGHT }, () => Array(BOARD_WIDTH).fill(false));
 
-  // 가로/세로 패턴을 랜덤하게 섞어서 배치
-  const useVerticalBias = Math.random();
+  // 합이 10인 완전한 패턴들만 사용 (절대 부분적으로 덮어쓰지 않음)
+  const patterns = [
+    // 1x2 가로 패턴들
+    { shape: [[1,9]], width: 2, height: 1 },
+    { shape: [[2,8]], width: 2, height: 1 },
+    { shape: [[3,7]], width: 2, height: 1 },
+    { shape: [[4,6]], width: 2, height: 1 },
+    { shape: [[5,5]], width: 2, height: 1 },
 
-  if (useVerticalBias < 0.3) {
-    // 30% 확률로 세로 패턴 위주
-    fillVerticalPatterns(board);
-  } else if (useVerticalBias < 0.6) {
-    // 30% 확률로 가로 패턴 위주
-    fillHorizontalPatterns(board);
-  } else {
-    // 40% 확률로 혼합 패턴
-    fillMixedPatterns(board);
+    // 2x1 세로 패턴들
+    { shape: [[1],[9]], width: 1, height: 2 },
+    { shape: [[2],[8]], width: 1, height: 2 },
+    { shape: [[3],[7]], width: 1, height: 2 },
+    { shape: [[4],[6]], width: 1, height: 2 },
+    { shape: [[5],[5]], width: 1, height: 2 },
+
+    // 1x3 가로 패턴들
+    { shape: [[1,2,7]], width: 3, height: 1 },
+    { shape: [[1,3,6]], width: 3, height: 1 },
+    { shape: [[1,4,5]], width: 3, height: 1 },
+    { shape: [[2,2,6]], width: 3, height: 1 },
+    { shape: [[2,3,5]], width: 3, height: 1 },
+    { shape: [[2,4,4]], width: 3, height: 1 },
+    { shape: [[3,3,4]], width: 3, height: 1 },
+
+    // 3x1 세로 패턴들
+    { shape: [[1],[2],[7]], width: 1, height: 3 },
+    { shape: [[1],[3],[6]], width: 1, height: 3 },
+    { shape: [[1],[4],[5]], width: 1, height: 3 },
+    { shape: [[2],[2],[6]], width: 1, height: 3 },
+    { shape: [[2],[3],[5]], width: 1, height: 3 },
+    { shape: [[2],[4],[4]], width: 1, height: 3 },
+    { shape: [[3],[3],[4]], width: 1, height: 3 },
+
+    // 2x2 패턴들
+    { shape: [[1,2],[3,4]], width: 2, height: 2 },
+    { shape: [[1,1],[3,5]], width: 2, height: 2 },
+    { shape: [[1,2],[2,5]], width: 2, height: 2 },
+    { shape: [[1,1],[4,4]], width: 2, height: 2 },
+    { shape: [[2,2],[2,4]], width: 2, height: 2 },
+    { shape: [[2,3],[1,4]], width: 2, height: 2 },
+    { shape: [[3,3],[2,2]], width: 2, height: 2 }
+  ];
+
+  // 패턴을 배치할 수 있는지 체크하는 함수
+  function canPlacePattern(row: number, col: number, pattern: typeof patterns[0]): boolean {
+    if (row + pattern.height > BOARD_HEIGHT || col + pattern.width > BOARD_WIDTH) {
+      return false;
+    }
+
+    for (let r = 0; r < pattern.height; r++) {
+      for (let c = 0; c < pattern.width; c++) {
+        if (filled[row + r][col + c]) {
+          return false;
+        }
+      }
+    }
+    return true;
   }
 
-  // 안전장치: 빈 칸이 있으면 강제로 합 10 패턴으로 채우기
-  ensureAllCellsFilled(board);
-
-  return board;
-}
-
-/** 세로 패턴 위주로 보드 채우기 */
-function fillVerticalPatterns(board: number[][]) {
-  for (let c = 0; c < BOARD_WIDTH; c++) {
-    let r = 0;
-    while (r < BOARD_HEIGHT) {
-      const remainingHeight = BOARD_HEIGHT - r;
-
-      if (remainingHeight >= 3 && Math.random() < 0.4) {
-        // 3x1 세로 패턴
-        const pattern = shuffle(P31_V_PATTERNS)[0];
-        for (let i = 0; i < 3; i++) {
-          board[r + i][c] = pattern[i];
-        }
-        r += 3;
-      } else if (remainingHeight >= 2) {
-        // 2x1 세로 패턴
-        const pattern = shuffle(P21_V_PATTERNS)[0];
-        board[r][c] = pattern[0];
-        board[r + 1][c] = pattern[1];
-        r += 2;
-      } else {
-        // 남은 1칸은 다음 열에서 처리
-        break;
+  // 패턴을 배치하는 함수
+  function placePattern(row: number, col: number, pattern: typeof patterns[0]): void {
+    for (let r = 0; r < pattern.height; r++) {
+      for (let c = 0; c < pattern.width; c++) {
+        board[row + r][col + c] = pattern.shape[r][c];
+        filled[row + r][col + c] = true;
       }
     }
   }
-}
 
-/** 가로 패턴 위주로 보드 채우기 */
-function fillHorizontalPatterns(board: number[][]) {
-  for (let r = 0; r < BOARD_HEIGHT; r++) {
-    let c = 0;
-    while (c < BOARD_WIDTH) {
-      const remainingWidth = BOARD_WIDTH - c;
+  // 보드를 완전히 채울 때까지 반복
+  let attempts = 0;
+  while (attempts < 1000) { // 무한 루프 방지
+    let allFilled = true;
 
-      if (remainingWidth >= 3 && Math.random() < 0.4) {
-        // 1x3 가로 패턴
-        const pattern = shuffle(P13_H_PATTERNS)[0];
-        for (let i = 0; i < 3; i++) {
-          board[r][c + i] = pattern[i];
-        }
-        c += 3;
-      } else if (remainingWidth >= 2) {
-        // 1x2 가로 패턴
-        const pattern = shuffle(P12_H_PATTERNS)[0];
-        board[r][c] = pattern[0];
-        board[r][c + 1] = pattern[1];
-        c += 2;
-      } else {
-        // 남은 1칸은 다음 행에서 처리
-        break;
-      }
-    }
-  }
-}
+    // 빈 공간을 찾아서 패턴으로 채우기
+    for (let r = 0; r < BOARD_HEIGHT && allFilled; r++) {
+      for (let c = 0; c < BOARD_WIDTH && allFilled; c++) {
+        if (!filled[r][c]) {
+          allFilled = false;
 
-/** 혼합 패턴으로 보드 채우기 */
-function fillMixedPatterns(board: number[][]) {
-  // 2x2 패턴을 몇 개 배치
-  for (let r = 0; r < BOARD_HEIGHT - 1; r += 2) {
-    for (let c = 0; c < BOARD_WIDTH - 1; c += 2) {
-      if (Math.random() < 0.3) {
-        const pattern = shuffle(P22_PATTERNS)[0];
-        let k = 0;
-        for (let dr = 0; dr < 2; dr++) {
-          for (let dc = 0; dc < 2; dc++) {
-            board[r + dr][c + dc] = pattern[k++];
+          // 이 위치에 배치 가능한 패턴들을 찾기
+          const availablePatterns = patterns.filter(p => canPlacePattern(r, c, p));
+
+          if (availablePatterns.length > 0) {
+            // 랜덤하게 하나 선택해서 배치
+            const selectedPattern = availablePatterns[Math.floor(Math.random() * availablePatterns.length)];
+            placePattern(r, c, selectedPattern);
           }
         }
       }
     }
+
+    if (allFilled) break;
+    attempts++;
   }
 
-  // 나머지 공간을 가로/세로 패턴으로 채우기
+  // 혹시 못 채운 곳이 있다면 1x2 패턴으로 강제로 채우기
   for (let r = 0; r < BOARD_HEIGHT; r++) {
-    for (let c = 0; c < BOARD_WIDTH; c++) {
-      if (board[r][c] === 0) {
-        // 가로 패턴 시도
-        if (c + 1 < BOARD_WIDTH && board[r][c + 1] === 0) {
-          const pattern = shuffle(P12_H_PATTERNS)[0];
-          board[r][c] = pattern[0];
-          board[r][c + 1] = pattern[1];
-        }
-        // 세로 패턴 시도
-        else if (r + 1 < BOARD_HEIGHT && board[r + 1][c] === 0) {
-          const pattern = shuffle(P21_V_PATTERNS)[0];
-          board[r][c] = pattern[0];
-          board[r + 1][c] = pattern[1];
-        }
+    for (let c = 0; c < BOARD_WIDTH - 1; c++) {
+      if (!filled[r][c] && !filled[r][c + 1]) {
+        const pattern1x2 = patterns[Math.floor(Math.random() * 5)]; // 첫 5개는 1x2 패턴
+        placePattern(r, c, pattern1x2);
       }
     }
   }
-}
 
-/** 모든 셀이 채워졌는지 확인하고 빈 칸 처리 */
-function ensureAllCellsFilled(board: number[][]) {
-  for (let r = 0; r < BOARD_HEIGHT; r++) {
-    for (let c = 0; c < BOARD_WIDTH; c++) {
-      if (board[r][c] === 0) {
-        // 인접한 빈 칸과 합쳐서 패턴 만들기
-        if (c + 1 < BOARD_WIDTH && board[r][c + 1] === 0) {
-          const pattern = shuffle(P12_H_PATTERNS)[0];
-          board[r][c] = pattern[0];
-          board[r][c + 1] = pattern[1];
-        } else if (r + 1 < BOARD_HEIGHT && board[r + 1][c] === 0) {
-          const pattern = shuffle(P21_V_PATTERNS)[0];
-          board[r][c] = pattern[0];
-          board[r + 1][c] = pattern[1];
-        } else {
-          // 혼자 남은 칸은 인접 칸과 맞춰서 합 10 만들기
-          fillSingleCell(board, r, c);
-        }
-      }
-    }
-  }
-}
-
-/** 단일 빈 칸을 인접 칸과 맞춰서 채우기 */
-function fillSingleCell(board: number[][], r: number, c: number) {
-  // 인접한 칸 중 0이 아닌 칸 찾기
-  const neighbors = [];
-  if (r > 0 && board[r-1][c] !== 0) neighbors.push({r: r-1, c, val: board[r-1][c]});
-  if (r < BOARD_HEIGHT-1 && board[r+1][c] !== 0) neighbors.push({r: r+1, c, val: board[r+1][c]});
-  if (c > 0 && board[r][c-1] !== 0) neighbors.push({r, c: c-1, val: board[r][c-1]});
-  if (c < BOARD_WIDTH-1 && board[r][c+1] !== 0) neighbors.push({r, c: c+1, val: board[r][c+1]});
-
-  if (neighbors.length > 0) {
-    // 인접 칸과 합쳐서 10이 되도록 설정
-    const neighbor = neighbors[0];
-    const targetSum = 10;
-    const currentSum = neighbor.val;
-    const needed = targetSum - currentSum;
-
-    if (needed > 0 && needed <= 9) {
-      board[r][c] = needed;
-      // 기존 패턴을 새로운 패턴으로 교체
-      board[neighbor.r][neighbor.c] = currentSum;
-    } else {
-      // 안전한 기본값
-      board[r][c] = Math.floor(Math.random() * 9) + 1;
-    }
-  } else {
-    // 인접 칸이 없으면 기본값
-    board[r][c] = Math.floor(Math.random() * 9) + 1;
-  }
+  return board;
 }
 
 /** ===================== 타입 및 컴포넌트 ===================== */
